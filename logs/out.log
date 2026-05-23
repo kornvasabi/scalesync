@@ -1,0 +1,28 @@
+2026-05-15 14:28:09: ◇ injected env (6) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+2026-05-15 14:28:09: ◇ injected env (6) from .env // tip: ⌘ override existing { override: true }
+2026-05-15 14:28:10: ◇ injected env (6) from .env // tip: ⌘ override existing { override: true }
+2026-05-15 14:28:10: ◇ injected env (6) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+2026-05-15 14:28:10: ◇ injected env (0) from .env // tip: ⌘ enable debugging { debug: true }
+2026-05-15 14:28:11: -------------------------------------------
+2026-05-15 14:28:11: 🚀 Myproject_nodejs start at PORT: 4000
+2026-05-15 14:28:11: 🌐 Base URL is set to: "/emis"
+2026-05-15 14:28:11: -------------------------------------------
+2026-05-15 14:28:11: ✅ connect to MySQL success!
+2026-05-15 14:28:10: ◇ injected env (0) from .env // tip: ⌘ override existing { override: true }
+2026-05-15 14:28:11: -------------------------------------------
+2026-05-15 14:28:11: 🚀 Myproject_nodejs start at PORT: 4000
+2026-05-15 14:28:11: 🌐 Base URL is set to: "/emis"
+2026-05-15 14:28:11: -------------------------------------------
+2026-05-15 14:28:11: ✅ connect to MySQL success!
+2026-05-15 14:28:10: ◇ injected env (0) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+2026-05-15 14:28:11: -------------------------------------------
+2026-05-15 14:28:11: 🚀 Myproject_nodejs start at PORT: 4000
+2026-05-15 14:28:11: 🌐 Base URL is set to: "/emis"
+2026-05-15 14:28:11: -------------------------------------------
+2026-05-15 14:28:11: ✅ connect to MySQL success!
+2026-05-15 14:28:10: ◇ injected env (0) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+2026-05-15 14:28:11: -------------------------------------------
+2026-05-15 14:28:11: 🚀 Myproject_nodejs start at PORT: 4000
+2026-05-15 14:28:11: 🌐 Base URL is set to: "/emis"
+2026-05-15 14:28:11: -------------------------------------------
+2026-05-15 14:28:11: ✅ connect to MySQL success!

@@ -1,0 +1,553 @@
+$(document).ready(function() {
+    // ดึงข้อมูลมาใช้งานได้อย่างสบายใจ ไม่มีเส้นแดงมากวนใจ
+    const allEngines = JSON.parse(document.getElementById('rawEnginesData').textContent);
+    const engineTypes = JSON.parse(document.getElementById('rawEngineTypesData').textContent);
+
+    // ตั้งค่า วันที่เริ่มต้นค้นหาเป็นวันปัจจุบัน
+    const todayStr = new Date().toISOString().split('T')[0];
+    $('#searchStartDate').val(todayStr);
+    $('#searchEndDate').val(todayStr);
+
+    // 🟢 1. ประกาศตัวแปรเก็บ ID รถที่ใช้ไปแล้ว
+    let usedEngineIdsInDB = []; 
+
+    // 🟢 2. ฟังก์ชันไปถาม Database ว่ามีรถคันไหนใช้ไปแล้วบ้าง
+    function fetchAndResetEngines() {
+        let branchId = $('#formBranch').val();
+        let transDate = $('#formDate').val();
+
+        $('#engineRows').empty(); // เคลียร์ตารางกรอกข้อมูลทิ้งก่อน
+
+        if (branchId && transDate) {
+            Swal.fire({ title: 'กำลังอัปเดตตัวเลือก...', showConfirmButton: false, didOpen: () => { Swal.showLoading(); }});
+
+            $.get(`<%= baseUrl %>/api/fuel_trans/existing?branch_id=${branchId}&transaction_date=${transDate}`, function(res) {
+                Swal.close();
+                if (res.status === 'success') {
+                    usedEngineIdsInDB = res.data || [];
+                    addRow(); // สร้างแถวใหม่รอไว้
+                }
+            }).fail(() => Swal.close());
+        } else {
+            addRow();
+        }
+    }
+
+    // 🟢 3. ดักจับเมื่อเปลี่ยนสาขา หรือเปลี่ยนวันที่
+    $('#formBranch, #formDate').on('change', function() {
+        if ($('#addTransModal').is(':visible')) {
+            fetchAndResetEngines();
+        }
+    });
+
+    // 🟢 4. ระบบป้องกันเลือกซ้ำระหว่างแถว (Client-side)
+    function updateEngineSelects() {
+        let selectedValues = [];
+        $('.engine-select').each(function() {
+            let val = $(this).val();
+            if (val) selectedValues.push(val);
+        });
+
+        $('.engine-select').each(function() {
+            let currentSelect = $(this);
+            let currentValue = currentSelect.val();
+
+            currentSelect.find('option').each(function() {
+                let optionValue = $(this).val();
+                if (!optionValue) return;
+
+                if (selectedValues.includes(optionValue) && optionValue !== currentValue) {
+                    $(this).prop('disabled', true);
+                } else {
+                    $(this).prop('disabled', false);
+                }
+            });
+        });
+    }
+
+    $(document).on('change', '.engine-select', function() {
+        updateEngineSelects();
+    });
+
+    // สั่งอัปเดตล็อคทันทีเมื่อกดเพิ่ม/ลบแถว
+    $('#btnAddRow').click(function() { addRow(); updateEngineSelects(); });
+    $(document).on('click', '.btn-remove-row', function() { updateEngineSelects(); });
+
+    // ==========================================
+    // 🟢 ระบบจัดการตาราง (เพิ่มแถว & คำนวณ)
+    // ==========================================
+    
+    // สร้างตัวเลือกประเภท
+    let typeOptionsHtml = '<option value="">-- เลือกประเภท --</option>';
+    engineTypes.forEach(t => {
+        typeOptionsHtml += `<option value="${t.id}">${t.type_name}</option>`;
+    });
+
+    function addRow() {
+        let tr = `
+            <tr>
+                <td>
+                    <select class="form-control type-select" name="engine_type_id[]" required>
+                        ${typeOptionsHtml}
+                    </select>
+                </td>
+                <td>
+                    <select class="form-control engine-select" name="engine_id[]" required disabled>
+                        <option value="">-- เลือกประเภทก่อน --</option>
+                    </select>
+                </td>
+                <td><input type="number" step="0.01" class="form-control text-center text-primary calc-input fuel-input" name="fuel_liters[]" required placeholder="0.00"></td>
+                <td><input type="number" step="0.01" class="form-control text-center text-success calc-input hour-input" name="working_hours[]" required placeholder="0.00"></td>
+                <td><input type="text" class="form-control text-center text-danger font-weight-bold rate-input" readonly placeholder="Auto"></td>
+                <td><input type="text" class="form-control" name="remarks[]" placeholder="..."></td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-sm btn-outline-danger btn-remove-row" tabindex="-1"><i class="fas fa-times"></i></button>
+                </td>
+            </tr>
+        `;
+        $('#engineRows').append(tr);
+    }
+
+    // กดเพิ่มแถว
+    $('#btnAddRow').click(function() { addRow(); });
+
+    // กดลบแถว
+    $(document).on('click', '.btn-remove-row', function() {
+        if ($('#engineRows tr').length > 1) {
+            $(this).closest('tr').remove();
+        } else {
+            Swal.fire('คำเตือน', 'ต้องมีข้อมูลอย่างน้อย 1 รายการครับ', 'warning');
+        }
+    });
+
+    // ดึงทะเบียน เมื่อเปลี่ยนประเภท (อัปเกรดให้ตัดรถที่มีแล้วใน DB ออก)
+    $(document).on('change', '.type-select', function() {
+        let row = $(this).closest('tr');
+        let typeId = $(this).val();
+        let branchId = $('#formBranch').val();
+        let engineDrop = row.find('.engine-select');
+
+        engineDrop.html('<option value="">-- เลือกทะเบียน --</option>');
+
+        if (typeId && branchId) {
+            // 🚀 หักลบ ID ที่อยู่ใน usedEngineIdsInDB ทิ้งไป!
+            let filtered = allEngines.filter(e => 
+                e.branch_id == branchId && 
+                e.engine_type_id == typeId && 
+                !usedEngineIdsInDB.includes(e.id)
+            );
+
+            if (filtered.length > 0) {
+                filtered.forEach(e => {
+                    engineDrop.append(`<option value="${e.id}">${e.engine_code}</option>`);
+                });
+                engineDrop.prop('disabled', false);
+                updateEngineSelects(); // สั่งรีเฟรชล็อคการเลือก
+            } else {
+                engineDrop.html('<option value="">ถูกบันทึกหมดแล้ว</option>').prop('disabled', true);
+            }
+        } else {
+            engineDrop.prop('disabled', true);
+        }
+    });
+
+    // คำนวณอัตราสิ้นเปลืองอัตโนมัติ (ในตารางเพิ่มข้อมูล)
+    $(document).on('input', '.calc-input', function() {
+        let row = $(this).closest('tr');
+        let fuel = parseFloat(row.find('.fuel-input').val()) || 0;
+        let hours = parseFloat(row.find('.hour-input').val()) || 0;
+        let rateInput = row.find('.rate-input');
+        
+        if (hours > 0) rateInput.val((fuel / hours).toFixed(2));
+        else rateInput.val('');
+    });
+
+    // ==========================================
+    // 🟢 ระบบโหลดข้อมูล (DataTables)
+    // ==========================================
+
+    $('#searchForm').submit(function(e) {
+        e.preventDefault();
+        loadData();
+    });
+
+    function loadData() {
+        const startDate = $('#searchStartDate').val();
+        const endDate = $('#searchEndDate').val();
+        /*
+        Swal.fire({
+            title: 'กำลังโหลดข้อมูล...',
+            allowOutsideClick: false,
+            showConfirmButton: false,
+            didOpen: () => { Swal.showLoading(); }
+        });
+        */
+        $.get(`<%= baseUrl %>/api/fuel_trans?startDate=${startDate}&endDate=${endDate}`, function(response) {
+            // Swal.close();
+
+            if (response.status === 'success') {
+                let rows = '';
+                let mobileCards = ''; 
+
+                response.data.forEach(t => {
+                    let transData = encodeURIComponent(JSON.stringify(t));
+                    
+                    // Desktop Rows
+                    rows += `
+                        <tr>
+                            <td class="text-center">${t.display_date}</td>
+                            <td class="text-center"><span class="badge badge-info">${t.branch_name}</span></td>
+                            <td class="text-center">${t.type_name}</td>
+                            <td class="font-weight-bold">${t.engine_code}</td>
+                            <td class="text-center text-primary font-weight-bold">${t.fuel_liters}</td>
+                            <td class="text-center text-success font-weight-bold">${t.working_hours}</td>
+                            <td class="text-center text-danger font-weight-bold">${t.consumption_rate}</td>
+                            <td><small class="text-muted">${t.remarks || '-'}</small></td>
+                            <td class="text-center"><small><i class="fas fa-user text-secondary"></i> ${t.created_by_name || '-'}</small></td>
+                            <td class="text-center" style="white-space: nowrap;">
+                                <button class="btn btn-sm btn-warning btn-edit" data-info="${transData}"><i class="fas fa-pen"></i></button>
+                                <button class="btn btn-sm btn-danger btn-delete" data-id="${t.id}"><i class="fas fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    `;
+
+                    // Mobile Cards
+                    mobileCards += `
+                        <div class="col-12 mb-3">
+                            <div class="card border-left-primary shadow-sm">
+                                <div class="card-body py-3">
+                                    <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
+                                        <span class="font-weight-bold"><i class="far fa-calendar-alt text-primary"></i> ${t.display_date}</span>
+                                        <span class="badge badge-info">${t.branch_name}</span>
+                                    </div>
+                                    <h6 class="font-weight-bold text-dark">${t.engine_code} <small class="text-muted">(${t.type_name})</small></h6>
+                                    <div class="row text-center mt-2">
+                                        <div class="col-4 border-right">
+                                            <small class="text-muted">น้ำมัน (L)</small><br>
+                                            <span class="font-weight-bold text-primary">${t.fuel_liters}</span>
+                                        </div>
+                                        <div class="col-4 border-right">
+                                            <small class="text-muted">ทำงาน (Hr)</small><br>
+                                            <span class="font-weight-bold text-success">${t.working_hours}</span>
+                                        </div>
+                                        <div class="col-4">
+                                            <small class="text-muted">ลิตร/ชม.</small><br>
+                                            <span class="font-weight-bold text-danger">${t.consumption_rate}</span>
+                                        </div>
+                                    </div>
+                                    <div class="text-right border-top pt-2 mt-2">
+                                        <button class="btn btn-sm btn-outline-warning btn-edit" data-info="${transData}"><i class="fas fa-pen"></i></button>
+                                        <button class="btn btn-sm btn-outline-danger btn-delete" data-id="${t.id}"><i class="fas fa-trash"></i></button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                if ($.fn.DataTable.isDataTable('#transTable')) { $('#transTable').DataTable().clear().destroy(); }
+                $('#transTableBody').html(rows);
+                $('#transTable').DataTable({ language: { url: 'https://cdn.datatables.net/plug-ins/1.13.4/i18n/th.json' }, order: [[0, 'desc']] });
+                $('#transListMobile').html(mobileCards || '<div class="col-12 text-center text-muted py-4">ไม่พบข้อมูล</div>');
+            } else {
+                Swal.fire('ข้อผิดพลาด', response.message, 'warning');
+            }
+        }).fail(() => Swal.fire('ขัดข้อง', 'ไม่สามารถโหลดข้อมูลได้', 'error'));
+    }
+
+    // โหลดครั้งแรกตอนเปิดหน้าเว็บ
+    loadData();
+
+    // ==========================================
+    // 🟢 ระบบบันทึก / แก้ไข / ลบ (CRUD)
+    // ==========================================
+
+    // เปิดฟอร์มบันทึก
+    $('#btnAddTrans').click(function() {
+        $('#addTransForm')[0].reset();
+        document.getElementById('formDate').valueAsDate = new Date();
+        $('#addTransModal').modal('show');
+        
+        // ให้มันดึงค่าจากหลังบ้าน แล้วสร้างแถวให้แบบอัตโนมัติ
+        fetchAndResetEngines();
+    });
+
+    // Submit เพิ่มข้อมูล
+    $('#addTransForm').submit(function(e) {
+        e.preventDefault();
+        let btn = $(this).find('button[type="submit"]');
+        let originalText = btn.html();
+        btn.html('<i class="fas fa-spinner fa-spin"></i> กำลังบันทึก...').prop('disabled', true);
+
+        $.post('<%= baseUrl %>/api/fuel_trans/add', $(this).serialize(), function(res) {
+            if(res.status === 'success') {
+                Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', showConfirmButton: false, timer: 1500 });
+                $('#addTransModal').modal('hide');
+                loadData(); 
+            } else {
+                Swal.fire('ข้อผิดพลาด', res.message, 'warning');
+            }
+        }).fail(() => Swal.fire('Error', 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error'))
+          .always(() => btn.html(originalText).prop('disabled', false));
+    });
+
+    // เปิดฟอร์มแก้ไข
+    $(document).on('click', '.btn-edit', function() {
+        let data = JSON.parse(decodeURIComponent($(this).data('info')));
+        $('#editTransId').val(data.id);
+        $('#editDateText').text(data.display_date);
+        $('#editEngineText').text(`${data.engine_code} (${data.type_name})`);
+        
+        $('#editFuel').val(data.fuel_liters);
+        $('#editWorkHrs').val(data.working_hours);
+        $('#editRate').val(data.consumption_rate);
+        $('#editRemarks').val(data.remarks);
+        
+        $('#editTransModal').modal('show');
+    });
+
+    // คำนวณอัตโนมัติ (ในฟอร์มแก้ไข)
+    $('.calc-edit').on('input', function() {
+        let fuel = parseFloat($('#editFuel').val()) || 0;
+        let hours = parseFloat($('#editWorkHrs').val()) || 0;
+        if (hours > 0) $('#editRate').val((fuel / hours).toFixed(2));
+        else $('#editRate').val('');
+    });
+
+    // Submit แก้ไขข้อมูล
+    $('#editTransForm').submit(function(e) {
+        e.preventDefault();
+        let id = $('#editTransId').val();
+        let btn = $(this).find('button[type="submit"]');
+        let originalText = btn.html();
+        btn.html('<i class="fas fa-spinner fa-spin"></i> กำลังอัปเดต...').prop('disabled', true);
+
+        $.post(`<%= baseUrl %>/api/fuel_trans/update/${id}`, $(this).serialize(), function(res) {
+            if(res.status === 'success') {
+                Swal.fire({ icon: 'success', title: 'อัปเดตสำเร็จ', showConfirmButton: false, timer: 1500 });
+                $('#editTransModal').modal('hide');
+                loadData(); 
+            } else {
+                Swal.fire('ข้อผิดพลาด', res.message, 'warning');
+            }
+        }).fail(() => Swal.fire('Error', 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error'))
+          .always(() => btn.html(originalText).prop('disabled', false));
+    });
+
+    // ยืนยันการลบ
+    $(document).on('click', '.btn-delete', function() {
+        let id = $(this).data('id');
+        Swal.fire({
+            title: 'ยืนยันการยกเลิก?',
+            text: "รายการนี้จะถูกซ่อนจากระบบ",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'ใช่, ยกเลิกเลย!',
+            cancelButtonText: 'ปิด'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                Swal.fire({ title: 'กำลังดำเนินการ...', showConfirmButton: false, didOpen: () => { Swal.showLoading(); }});
+                $.post(`<%= baseUrl %>/api/fuel_trans/delete/${id}`, function(res) {
+                    if(res.status === 'success') {
+                        Swal.fire('สำเร็จ!', res.message, 'success');
+                        loadData(); 
+                    } else {
+                        Swal.fire('ข้อผิดพลาด', res.message, 'error');
+                    }
+                }).fail(() => Swal.fire('ขัดข้อง', 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้', 'error'));
+            }
+        });
+    });
+    // ==========================================
+    // 🟢 ระบบรายงาน (Pivot Report แบบ 3 ชั้น)
+    // ==========================================
+    
+    $('#btnShowReport').click(function() {
+        const todayStr = new Date().toISOString().split('T')[0];
+        $('#reportStartDate').val(todayStr);
+        $('#reportEndDate').val(todayStr);
+        $('#reportThead').html('');
+        $('#reportTbody').html('<tr><td class="text-center py-5 text-muted">กรุณากดปุ่ม "แสดงรายงาน"</td></tr>');
+        $('#reportModal').modal('show');
+    });
+
+    $('#reportFilterForm').submit(function(e) {
+        e.preventDefault();
+        const branchId = $('#reportBranch').val();
+        const startDate = $('#reportStartDate').val();
+        const endDate = $('#reportEndDate').val();
+
+        Swal.fire({ title: 'กำลังประมวลผล...', showConfirmButton: false, didOpen: () => { Swal.showLoading(); }});
+
+        $.get(`<%= baseUrl %>/api/fuel_trans/report?branch_id=${branchId}&startDate=${startDate}&endDate=${endDate}`, function(res) {
+            Swal.close();
+            if (res.status === 'success') {
+                renderPivotTable(res.data.engines, res.data.transactions);
+            } else {
+                Swal.fire('ข้อผิดพลาด', res.message, 'warning');
+            }
+        }).fail(() => Swal.fire('Error', 'ไม่สามารถโหลดข้อมูลได้', 'error'));
+    });
+
+    function renderPivotTable(engines, transactions) {
+        if (engines.length === 0) {
+            $('#reportTbody').html('<tr><td class="text-center py-5 text-danger">ไม่พบข้อมูลเชื้อเพลิงในช่วงเวลานี้</td></tr>');
+            return;
+        }
+
+        // 1. จัดกลุ่มข้อมูลตามวันที่
+        const dataByDate = {};
+        const engineTotals = {}; 
+
+        engines.forEach(e => { engineTotals[e.id] = { fuel: 0, work: 0 }; });
+
+        transactions.forEach(t => {
+            if (!engineTotals[t.engine_id]) return;
+
+            if (!dataByDate[t.record_date]) {
+                // เก็บวันที่ โดยใช้ format 'วัน/เดือน' หรือ 'วันที่' ตามตัวอย่าง
+                dataByDate[t.record_date] = { display_date: t.display_date, day_only: t.day_only, engines: {} };
+            }
+            
+            let fLiters = parseFloat(t.fuel_liters) || 0;
+            let wHrs = parseFloat(t.working_hours) || 0;
+
+            if (!dataByDate[t.record_date].engines[t.engine_id]) {
+                dataByDate[t.record_date].engines[t.engine_id] = { fuel: 0, work: 0 };
+            }
+            dataByDate[t.record_date].engines[t.engine_id].fuel += fLiters;
+            dataByDate[t.record_date].engines[t.engine_id].work += wHrs;
+
+            engineTotals[t.engine_id].fuel += fLiters;
+            engineTotals[t.engine_id].work += wHrs;
+        });
+
+        // 2. สร้าง Header 3 ชั้น (ตามรูปตัวอย่าง)
+        let thead1 = `<tr><th rowspan="3" class="align-middle text-center bg-white" style="position: sticky; left: 0; z-index: 2; border-bottom: 2px solid #dee2e6;">วันที่</th>`;
+        let thead2 = `<tr>`;
+        let thead3 = `<tr>`;
+
+        engines.forEach(e => {
+            // ชั้น 1: ทะเบียนรถ/ชื่อเครื่องจักร
+            thead1 += `<th colspan="3" class="text-center bg-warning text-dark border-dark">${e.engine_code}</th>`;
+            // ชั้น 2: ประเภท/ยี่ห้อ (เช่น TOYOTA, TCK)
+            thead2 += `<th colspan="3" class="text-center text-white border-dark" style="background-color: #e74a3b;">${e.type_name}</th>`;
+            // ชั้น 3: คอลัมน์ย่อย
+            thead3 += `
+                <th class="text-center bg-light border-dark"><small>ลิตร</small></th>
+                <th class="text-center bg-light border-dark"><small>ชั่วโมง</small></th>
+                <th class="text-center bg-light border-dark"><small>ล/ชม</small></th>
+            `;
+        });
+        thead1 += `</tr>`; thead2 += `</tr>`; thead3 += `</tr>`;
+
+        // 3. สร้าง Body
+        let tbody = ``;
+        let dates = Object.keys(dataByDate).sort(); 
+        
+        if (dates.length === 0) {
+            tbody = `<tr><td colspan="${(engines.length * 3) + 1}" class="text-center py-4">ไม่พบประวัติการบันทึกข้อมูล</td></tr>`;
+        } else {
+            dates.forEach(d => {
+                let rowData = dataByDate[d];
+                // คอลัมน์วันที่
+                tbody += `<tr><td class="text-center font-weight-bold bg-white border-dark" style="position: sticky; left: 0; z-index: 1;">${rowData.day_only}</td>`;
+
+                engines.forEach(e => {
+                    let eData = rowData.engines[e.id];
+                    if (eData) {
+                        let rate = eData.work > 0 ? (eData.fuel / eData.work).toFixed(2) : '-';
+                        tbody += `
+                            <td class="text-center border-dark bg-white">${eData.fuel > 0 ? eData.fuel.toFixed(2) : '-'}</td>
+                            <td class="text-center border-dark bg-white">${eData.work > 0 ? eData.work.toFixed(2) : '-'}</td>
+                            <td class="text-center text-danger border-dark bg-white">${rate}</td>
+                        `;
+                    } else {
+                        tbody += `
+                            <td class="text-center text-muted border-dark bg-white">-</td>
+                            <td class="text-center text-muted border-dark bg-white">-</td>
+                            <td class="text-center text-muted border-dark bg-white">-</td>
+                        `;
+                    }
+                });
+                tbody += `</tr>`;
+            });
+
+            // 4. แถวรวม (Totals)
+            let totalRow = `<tr><td class="text-center font-weight-bold border-dark" style="position: sticky; left: 0; z-index: 1; background-color: #e2e3e5;">รวม</td>`;
+            
+            engines.forEach(e => {
+                let tFuel = engineTotals[e.id].fuel;
+                let tWork = engineTotals[e.id].work;
+                let overallRate = tWork > 0 ? (tFuel / tWork).toFixed(2) : '-';
+
+                totalRow += `
+                    <td class="text-center font-weight-bold text-primary border-dark" style="background-color: #e2e3e5;">${tFuel > 0 ? tFuel.toFixed(2) : '-'}</td>
+                    <td class="text-center font-weight-bold text-success border-dark" style="background-color: #e2e3e5;">${tWork > 0 ? tWork.toFixed(2) : '-'}</td>
+                    <td class="text-center font-weight-bold text-danger border-dark" style="background-color: #e2e3e5;">${overallRate}</td>
+                `;
+            });
+            totalRow += `</tr>`;
+            tbody += totalRow;
+        }
+
+        $('#reportThead').html(thead1 + thead2 + thead3);
+        $('#reportTbody').html(tbody);
+    }
+
+    // ==========================================
+    // 🟢 ระบบ Export Excel (สีสันเหมือนหน้าเว็บ)
+    // ==========================================
+    $('#btnExportExcel').click(function() {
+        if ($('#reportThead').html().trim() === '') {
+            Swal.fire('คำเตือน', 'กรุณากดดึงข้อมูลก่อน Export', 'warning'); return;
+        }
+
+        let branchText = $("#reportBranch option:selected").text().trim() || "รวมทุกสาขา";
+        let fileName = `รายงานน้ำมัน_${branchText}.xlsx`;
+
+        let wb = XLSX.utils.table_to_book(document.getElementById("reportTable"), { sheet: "Report" });
+        let ws = wb.Sheets["Report"];
+
+        for (let cellAddress in ws) {
+            if (cellAddress[0] === '!') continue; 
+            let cell = ws[cellAddress];
+            let rowNum = parseInt(cellAddress.replace(/\D/g, ''));
+            let firstCellOfRow = ws['A' + rowNum];
+            let rowLabel = firstCellOfRow ? firstCellOfRow.v : '';
+
+            let cellStyle = {
+                font: { name: "TH SarabunPSK", sz: 16 },
+                alignment: { vertical: "center", horizontal: "center" },
+                border: {
+                    top: { style: "thin", color: { rgb: "000000" } }, bottom: { style: "thin", color: { rgb: "000000" } },
+                    left: { style: "thin", color: { rgb: "000000" } }, right: { style: "thin", color: { rgb: "000000" } }
+                }
+            };
+
+            // หัวตาราง 3 ชั้น
+            if (rowNum === 1) { // ชั้น 1: ทะเบียน
+                cellStyle.font.bold = true; cellStyle.fill = { fgColor: { rgb: "FFD966" } }; // สีเหลือง
+            } else if (rowNum === 2) { // ชั้น 2: ประเภท/ยี่ห้อ
+                cellStyle.font.bold = true; cellStyle.font.color = { rgb: "FFFFFF" }; cellStyle.fill = { fgColor: { rgb: "E74A3B" } }; // สีแดง
+            } else if (rowNum === 3) { // ชั้น 3: หน่วย
+                cellStyle.font.bold = true; cellStyle.fill = { fgColor: { rgb: "F2F2F2" } }; // สีเทาอ่อน
+            }
+            // แถวรวม
+            else if (rowLabel === 'รวม') {
+                cellStyle.font.bold = true; cellStyle.fill = { fgColor: { rgb: "E2E3E5" } }; 
+            }
+
+            cell.s = cellStyle;
+        }
+
+        let colWidths = [{ wch: 15 }]; 
+        for (let i = 0; i < 100; i++) colWidths.push({ wch: 10 }); 
+        ws['!cols'] = colWidths;
+
+        XLSX.writeFile(wb, fileName);
+    });
+    
+});

@@ -1,0 +1,644 @@
+<%# ============================================================ %>
+<%# USER LIST PAGE                                               %>
+<%# ============================================================ %>
+
+<%# ── CSS โหลดก่อน content เสมอ (ป้องกัน layout shift) ────── %>
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+
+<style>
+    /* ── Search Box ─────────────────────────────────────────── */
+    .search-wrapper {
+        background: #f8f9fc;
+        border: 1px solid #e3e6f0;
+        border-radius: 0.5rem;
+        padding: 1rem 1.25rem;
+        margin-bottom: 1rem;
+    }
+    .search-wrapper .input-group .form-control {
+        border-right: 0;
+        border-radius: 0.35rem 0 0 0.35rem;
+    }
+    .search-wrapper .input-group .form-control:focus {
+        box-shadow: none;
+        border-color: #4e73df;
+    }
+    #searchBadge {
+        display: none;
+        font-size: 0.8rem;
+    }
+    /* ── Select2 ────────────────────────────────────────────── */
+    .select2-container .select2-selection--multiple {
+        min-height: 38px;
+        border: 1px solid #d1d3e2;
+        border-radius: 0.35rem;
+    }
+    .select2-container--default .select2-selection--multiple .select2-selection__choice {
+        background-color: #4e73df;
+        border: none;
+        color: white;
+        padding: 5px 10px;
+        margin-top: 6px;
+    }
+    .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+        color: white;
+        margin-right: 5px;
+        border-right: none;
+        padding-right: 5px;
+    }
+    .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
+        color: #ffcccc;
+        background: transparent;
+    }
+    /* ── DataTable processing overlay ──────────────────────── */
+    #usersTable_processing {
+        background: rgba(255,255,255,0.85);
+        border: 1px solid #e3e6f0;
+        border-radius: 0.35rem;
+        padding: 0.5rem 1rem;
+        font-weight: 600;
+        color: #4e73df;
+    }
+</style>
+
+<%- include('./layouts/header') %>
+<%- include('./layouts/sidebar') %>
+
+<%# ── CONTENT WRAPPER ────────────────────────────────────────── %>
+<div id="content-wrapper" class="d-flex flex-column">
+    <div id="content">
+
+        <%- include('./layouts/topbar') %>
+
+        <div class="my-custom-scroll">
+            <div class="container-fluid">
+
+                <h1 class="h3 mb-4 text-gray-800"><%= __('user_list.page_title') %></h1>
+
+                <%# ── USER TABLE CARD ──────────────────────────── %>
+                <div class="card shadow mb-4">
+                    <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                        <h6 class="m-0 font-weight-bold text-primary">
+                            <i class="fas fa-users"></i> <%= __('user_list.card_title') %>
+                        </h6>
+                        <% if (permission && permission.can_add === 1) { %>
+                            <button class="btn btn-sm btn-success shadow-sm"
+                                    data-toggle="modal" data-target="#addUserModal">
+                                <i class="fas fa-plus fa-sm text-white-50"></i> <%= __('action.add') %>
+                            </button>
+                        <% } %>
+                    </div>
+
+                    <div class="card-body">
+
+                        <%# ── SEARCH BAR ────────────────────────── %>
+                        <div class="search-wrapper">
+                            <div class="row align-items-center">
+                                <div class="col-md-6 col-sm-12">
+                                    <label class="small font-weight-bold text-gray-600 mb-1">
+                                        <i class="fas fa-search fa-sm"></i> ค้นหาผู้ใช้งาน
+                                    </label>
+                                    <div class="input-group">
+                                        <input type="text"
+                                               id="searchUsername"
+                                               class="form-control form-control-sm"
+                                               placeholder="พิมพ์ Username หรือ ชื่อ-นามสกุล แล้วกด Enter หรือปุ่มค้นหา..."
+                                               autocomplete="off">
+                                        <div class="input-group-append">
+                                            <button class="btn btn-primary btn-sm" id="btnSearch" type="button">
+                                                <i class="fas fa-search fa-sm"></i> ค้นหา
+                                            </button>
+                                            <button class="btn btn-outline-secondary btn-sm" id="btnClear" type="button" title="ล้างการค้นหา">
+                                                <i class="fas fa-times fa-sm"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 col-sm-12 mt-2 mt-md-0">
+                                    <div class="small text-muted mt-3">
+                                        <span id="searchBadge" class="badge badge-primary mr-2">
+                                            <i class="fas fa-filter fa-sm"></i>
+                                            กำลังค้นหา: "<span id="searchKeyword"></span>"
+                                        </span>
+                                        <span id="totalRecord"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <%# ── END SEARCH BAR ────────────────────── %>
+
+                        <div class="table-responsive">
+                            <% const hasActionCol = permission && (permission.can_edit === 1 || permission.can_delete === 1); %>
+                            <table class="table table-bordered table-hover"
+                                   id="usersTable"
+                                   width="100%"
+                                   cellspacing="0">
+                                <thead class="thead-light">
+                                    <tr>
+                                        <th width="5%"  class="text-center"><%= __('user_list.col_id') %></th>
+                                        <th><%= __('user_list.col_username') %></th>
+                                        <th><%= __('user_list.col_fullname') %></th>
+                                        <th><%= __('user_list.col_group') %></th>
+                                        <th><%= __('user_list.col_branch') %></th>
+                                        <th><%= __('user_list.col_dept') %></th>
+                                        <th class="text-center"><%= __('user_list.col_expires') %></th>
+                                        <th class="text-center"><%= __('user_list.col_status') %></th>
+                                        <% if (hasActionCol) { %>
+                                            <th width="15%" class="text-center"><%= __('user_list.col_actions') %></th>
+                                        <% } %>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody><%# ← ว่างเปล่า DataTable โหลด AJAX เอง %>
+                            </table>
+                        </div>
+
+                    </div>
+                </div>
+                <%# ── END USER TABLE CARD ──────────────────────── %>
+
+            </div><%# /container-fluid %>
+        </div><%# /my-custom-scroll %>
+
+        <%- include('./layouts/footer') %>
+
+    </div><%# /content %>
+</div><%# /content-wrapper %>
+
+
+<%# ============================================================ %>
+<%# MODALS                                                       %>
+<%# ============================================================ %>
+
+<%# ── ADD USER MODAL ─────────────────────────────────────────── %>
+<div class="modal fade" id="addUserModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <form id="formAddUser">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">
+                        <i class="fas fa-user-plus"></i> <%= __('action.add') %>
+                    </h5>
+                    <button class="close text-white" type="button"
+                            data-dismiss="modal" aria-label="<%= __('action.close') %>">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 form-group">
+                            <label><%= __('form.username') %> <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="username" required>
+                        </div>
+                        <div class="col-md-6 form-group">
+                            <label><%= __('form.password') %> <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" name="password" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-8 form-group">
+                            <label><%= __('form.fullname') %> <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="fullname" required>
+                        </div>
+                        <div class="col-md-4 form-group">
+                            <label class="text-warning font-weight-bold">
+                                <i class="fas fa-clock"></i> <%= __('user_list.expires_label') %>
+                            </label>
+                            <input type="datetime-local" class="form-control border-warning" name="expires_at">
+                            <small class="text-muted"><%= __('user_list.expires_hint') %></small>
+                        </div>
+                    </div>
+                    <hr>
+                    <h6 class="font-weight-bold text-primary"><%= __('form.permissions') %></h6>
+                    <div class="row">
+                        <div class="col-md-4 form-group">
+                            <label><%= __('form.usergroup') %></label>
+                            <select class="form-control" name="group_id">
+                                <option value=""><%= __('form.selectno') %></option>
+                                <% groups.forEach(function(g) { %>
+                                    <option value="<%= g.id %>"><%= g.group_name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                        <div class="col-md-4 form-group">
+                            <label><%= __('form.locats') %></label>
+                            <select class="form-control" name="branch_id">
+                                <option value=""><%= __('form.selectno') %></option>
+                                <% branches.forEach(function(b) { %>
+                                    <option value="<%= b.id %>"><%= b.branch_name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                        <div class="col-md-12 form-group mt-2">
+                            <label class="font-weight-bold text-info">
+                                <i class="fas fa-map-marked-alt"></i> <%= __('user_list.secondary_branches_label') %>
+                            </label>
+                            <select class="form-control select2-multiple" name="accessible_branches" multiple="multiple" style="width:100%">
+                                <% branches.forEach(function(b) { %>
+                                    <option value="<%= b.id %>"><%= b.branch_code %> : <%= b.branch_name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                        <div class="col-md-4 form-group">
+                            <label><%= __('form.department') %></label>
+                            <select class="form-control" name="dept_id">
+                                <option value=""><%= __('form.selectno') %></option>
+                                <% departments.forEach(function(d) { %>
+                                    <option value="<%= d.id %>"><%= d.dept_name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" type="button" data-dismiss="modal"><%= __('action.cancel') %></button>
+                    <button type="submit" class="btn btn-success"><%= __('action.save') %></button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<%# ── EDIT USER MODAL ────────────────────────────────────────── %>
+<div class="modal fade" id="editUserModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <form id="formEditUser">
+                <input type="hidden" name="id" id="edit_id">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title">
+                        <i class="fas fa-user-edit"></i> <%= __('action.edit') %>
+                    </h5>
+                    <button class="close" type="button" data-dismiss="modal" aria-label="<%= __('action.close') %>">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 form-group">
+                            <label><%= __('user_list.edit_username_readonly') %></label>
+                            <input type="text" class="form-control bg-light" id="edit_username" readonly>
+                        </div>
+                        <div class="col-md-6 form-group">
+                            <label>
+                                <%= __('user_list.new_password') %>
+                                <span class="text-muted text-sm"><%= __('user_list.leave_blank_password') %></span>
+                            </label>
+                            <input type="password" class="form-control" name="password"
+                                   placeholder="<%= __('user_list.password_placeholder') %>">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label><%= __('user_list.fullname_label') %> <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="fullname" id="edit_fullname" required>
+                    </div>
+                    <hr>
+                    <div class="row">
+                        <div class="col-md-3 form-group">
+                            <label><%= __('form.usergroup') %></label>
+                            <select class="form-control" name="group_id" id="edit_group_id">
+                                <option value=""><%= __('form.selectno') %></option>
+                                <% groups.forEach(function(g) { %>
+                                    <option value="<%= g.id %>"><%= g.group_name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                        <div class="col-md-3 form-group">
+                            <label><%= __('form.locats') %></label>
+                            <select class="form-control" name="branch_id" id="edit_branch_id">
+                                <option value=""><%= __('form.selectno') %></option>
+                                <% branches.forEach(function(b) { %>
+                                    <option value="<%= b.id %>"><%= b.branch_name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                        <div class="col-md-12 form-group mt-2">
+                            <label class="font-weight-bold text-info">
+                                <i class="fas fa-map-marked-alt"></i> <%= __('user_list.secondary_branches_label') %>
+                            </label>
+                            <select class="form-control select2-multiple" name="accessible_branches"
+                                    id="edit_accessible_branches" multiple="multiple" style="width:100%">
+                                <% branches.forEach(function(b) { %>
+                                    <option value="<%= b.id %>"><%= b.branch_code %> : <%= b.branch_name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                        <div class="col-md-3 form-group">
+                            <label><%= __('form.department') %></label>
+                            <select class="form-control" name="dept_id" id="edit_dept_id">
+                                <option value=""><%= __('form.selectno') %></option>
+                                <% departments.forEach(function(d) { %>
+                                    <option value="<%= d.id %>"><%= d.dept_name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                        <div class="col-md-5 form-group">
+                            <label class="text-warning font-weight-bold">
+                                <i class="fas fa-clock"></i> <%= __('user_list.expires_label') %>
+                            </label>
+                            <input type="datetime-local" class="form-control border-warning" name="expires_at" id="edit_expires_at">
+                        </div>
+                        <div class="col-md-4 form-group">
+                            <label class="text-danger font-weight-bold"><%= __('user_list.account_status') %></label>
+                            <select class="form-control border-danger" name="force_logout" id="edit_force_logout">
+                                <option value="0"><%= __('user_list.account_normal') %></option>
+                                <option value="1"><%= __('user_list.account_suspended_temp') %></option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" type="button" data-dismiss="modal"><%= __('action.cancel') %></button>
+                    <button type="submit" class="btn btn-warning"><%= __('action.edit') %></button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+<%# ============================================================ %>
+<%# SCRIPTS                                                      %>
+<%# ============================================================ %>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+    /* ── i18n ────────────────────────────────────────────────── */
+    const i18n = <%- JSON.stringify({
+        noExpiry:          __('user_list.no_expiry'),
+        suspended:         __('user_list.status_suspended'),
+        normal:            __('user_list.status_normal'),
+        deleteSwalTitle:   __('user_list.delete_swal_title'),
+        deleteSwalText:    __('user_list.delete_swal_text'),
+        deleteSwalConfirm: __('user_list.delete_swal_confirm'),
+        deleteSwalCancel:  __('action.cancel'),
+        titleEdit:         __('user_list.title_edit'),
+        titleDelete:       __('user_list.title_delete'),
+        successTitle:      __('msg.success_title'),
+        errorTitle:        __('msg.error_title'),
+        serverError:       __('msg.server_error'),
+        networkError:      __('msg.network_error'),
+        select2Placeholder: __('user_list.select2_placeholder')
+    }) %>;
+
+    /* ── Permissions ─────────────────────────────────────────── */
+    const PERM_CAN_EDIT     = <%= (permission && permission.can_edit   === 1) ? 'true' : 'false' %>;
+    const PERM_CAN_DELETE   = <%= (permission && permission.can_delete === 1) ? 'true' : 'false' %>;
+    const HAS_ACTION_COLUMN = PERM_CAN_EDIT || PERM_CAN_DELETE;
+
+    /* ── Helper: แปลง expires_at → HTML ─────────────────────── */
+    function formatExpireDate(dateString) {
+        if (!dateString) {
+            return '<span class="text-muted"><small>' + i18n.noExpiry + '</small></span>';
+        }
+        const d     = new Date(dateString);
+        const now   = new Date();
+        const day   = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year  = d.getFullYear() + 543;
+        const time  = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+        const cls   = (now > d) ? 'text-danger font-weight-bold' : 'text-primary';
+        return `<small class="${cls}">${day}/${month}/${year} ${time}</small>`;
+    }
+
+    /* ── Document Ready ─────────────────────────────────────── */
+    $(document).ready(function () {
+
+        /* ══════════════ DataTable (Server-Side) ══════════════ */
+        const columns = [
+            { data: 'id',          className: 'text-center' },
+            { data: 'username' },
+            { data: 'fullname' },
+            { data: 'group_name',  render: d => d || '-' },
+            { data: 'branch_name', render: d => d || '-' },
+            { data: 'dept_name',   render: d => d || '-' },
+            {
+                data: 'expires_at',
+                className: 'text-center',
+                render: d => formatExpireDate(d)
+            },
+            {
+                data: 'force_logout',
+                className: 'text-center',
+                render: d => d === 1
+                    ? `<span class="badge badge-danger">${i18n.suspended}</span>`
+                    : `<span class="badge badge-success">${i18n.normal}</span>`
+            }
+        ];
+
+        if (HAS_ACTION_COLUMN) {
+            columns.push({
+                data: 'id',
+                className: 'text-center',
+                orderable: false,
+                render: function (id) {
+                    let btns = '';
+                    if (PERM_CAN_EDIT)   btns += `<button class="btn btn-warning btn-sm btn-edit" data-id="${id}" title="${i18n.titleEdit}"><i class="fas fa-edit"></i></button> `;
+                    if (PERM_CAN_DELETE) btns += `<button class="btn btn-danger btn-sm btn-delete" data-id="${id}" title="${i18n.titleDelete}"><i class="fas fa-trash"></i></button>`;
+                    return btns;
+                }
+            });
+        }
+
+        const table = $('#usersTable').DataTable({
+            processing:  true,
+            serverSide:  true,
+            searching:   true,   // เปิดไว้ให้ค้นหาผ่าน API ได้ (ซ่อน UI ด้วย CSS dom)
+            pageLength:  50,
+            dom: '<"row"<"col-sm-12 col-md-6"i><"col-sm-12 col-md-6"p>>rt<"row"<"col-sm-12 col-md-6"i><"col-sm-12 col-md-6"p>>',
+            ajax: {
+                url:  '<%= baseUrl %>/api/users_data',
+                type: 'POST',
+                error: function () {
+                    AppTools.showModal(i18n.serverError, i18n.networkError, 'error');
+                }
+            },
+            columns: columns,
+
+            /* อัปเดต badge จำนวนผลลัพธ์หลัง draw */
+            drawCallback: function (settings) {
+                const api      = this.api();
+                const filtered = settings.json?.recordsFiltered ?? 0;
+                const total    = settings.json?.recordsTotal    ?? 0;
+                const keyword  = $('#searchUsername').val().trim();
+
+                if (keyword) {
+                    $('#searchBadge').show();
+                    $('#searchKeyword').text(keyword);
+                    $('#totalRecord').html(`พบ <strong>${filtered}</strong> รายการ จากทั้งหมด ${total} รายการ`);
+                } else {
+                    $('#searchBadge').hide();
+                    $('#totalRecord').html(`ทั้งหมด <strong>${total}</strong> รายการ`);
+                }
+            },
+
+            language: {
+                processing:  '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังโหลด...',
+                zeroRecords: 'ไม่พบข้อมูลที่ตรงกับการค้นหา',
+                info:        'แสดง _START_ ถึง _END_ จาก _TOTAL_ รายการ',
+                infoEmpty:   'ไม่มีข้อมูล',
+                infoFiltered:'(กรองจากทั้งหมด _MAX_ รายการ)',
+                paginate:    { first:'«', last:'»', next:'›', previous:'‹' }
+            }
+        });
+
+        /* ══════════════ Search Bar Logic ══════════════ */
+        function doSearch() {
+            const keyword = $('#searchUsername').val().trim();
+            table.search(keyword).draw();
+        }
+
+        $('#btnSearch').on('click', doSearch);
+
+        /* กด Enter ในช่อง search */
+        $('#searchUsername').on('keypress', function (e) {
+            if (e.which === 13) doSearch();
+        });
+
+        /* ปุ่มล้างค้นหา */
+        $('#btnClear').on('click', function () {
+            $('#searchUsername').val('');
+            table.search('').draw();
+        });
+
+        /* ══════════════ Select2 ══════════════ */
+        const select2Cfg = ($parent) => ({
+            placeholder: i18n.select2Placeholder,
+            allowClear: true,
+            dropdownParent: $parent
+        });
+        $('#addUserModal  .select2-multiple').select2(select2Cfg($('#addUserModal')));
+        $('#editUserModal .select2-multiple').select2(select2Cfg($('#editUserModal')));
+
+        $('#addUserModal, #editUserModal').on('hidden.bs.modal', function () {
+            $(this).find('.select2-multiple').val(null).trigger('change');
+        });
+
+
+        /* ══════════════ เพิ่มผู้ใช้ใหม่ ══════════════ */
+        $('#formAddUser').on('submit', function (e) {
+            e.preventDefault();
+            $.ajax({
+                type: 'POST',
+                url:  '<%= baseUrl %>/api/add_user',
+                data: $(this).serialize(),
+                success: function (response) {
+                    if (response.status === 'success') {
+                        $('#addUserModal').modal('hide');
+                        $('#formAddUser')[0].reset();
+                        AppTools.showModal(i18n.successTitle, response.message, 'success');
+                        table.ajax.reload(null, false); // reload โดยไม่กระโดดไปหน้าแรก
+                    } else {
+                        AppTools.showModal(i18n.errorTitle, response.message, 'warning');
+                    }
+                },
+                error: function () {
+                    AppTools.showModal(i18n.serverError, i18n.networkError, 'error');
+                }
+            });
+        });
+
+
+        /* ══════════════ ดึงข้อมูลมาแก้ไข ══════════════ */
+        let currentUserId = null;
+
+        $('#usersTable').on('click', '.btn-edit', function () {
+            currentUserId = $(this).data('id');
+
+            $.ajax({
+                url:  '<%= baseUrl %>/api/get_user/' + currentUserId,
+                type: 'GET',
+                success: function (res) {
+                    if (res.status === 'success') {
+                        const u = res.data;
+
+                        $('#edit_id').val(u.id);
+                        $('#edit_username').val(u.username);
+                        $('#edit_fullname').val(u.fullname);
+                        $('#edit_group_id').val(u.group_id);
+                        $('#edit_branch_id').val(u.branch_id);
+                        $('#edit_dept_id').val(u.dept_id);
+                        $('#edit_force_logout').val(u.force_logout);
+
+                        if (u.expires_at) {
+                            const dt = new Date(u.expires_at);
+                            dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
+                            $('#edit_expires_at').val(dt.toISOString().slice(0, 16));
+                        } else {
+                            $('#edit_expires_at').val('');
+                        }
+
+                        const mapped = res.mapped_branches?.length ? res.mapped_branches : null;
+                        $('#edit_accessible_branches').val(mapped).trigger('change');
+
+                        $('#formEditUser input[name="password"]').val('');
+                        $('#editUserModal').modal('show');
+                    } else {
+                        AppTools.showModal(i18n.errorTitle, res.message, 'error');
+                    }
+                },
+                error: function () {
+                    AppTools.showModal(i18n.serverError, i18n.networkError, 'error');
+                }
+            });
+        });
+
+
+        /* ══════════════ บันทึกการแก้ไข ══════════════ */
+        $('#formEditUser').on('submit', function (e) {
+            e.preventDefault();
+            $.ajax({
+                type: 'POST',
+                url:  '<%= baseUrl %>/api/update_user',
+                data: $(this).serialize(),
+                success: function (response) {
+                    if (response.status === 'success') {
+                        $('#editUserModal').modal('hide');
+                        AppTools.showModal(i18n.successTitle, response.message, 'success');
+                        table.ajax.reload(null, false);
+                    } else {
+                        AppTools.showModal(i18n.errorTitle, response.message, 'warning');
+                    }
+                },
+                error: function () {
+                    AppTools.showModal(i18n.serverError, i18n.networkError, 'error');
+                }
+            });
+        });
+
+
+        /* ══════════════ ลบผู้ใช้ ══════════════ */
+        $('#usersTable').on('click', '.btn-delete', function () {
+            const userId = $(this).data('id');
+
+            Swal.fire({
+                title:              i18n.deleteSwalTitle,
+                text:               i18n.deleteSwalText,
+                icon:               'warning',
+                showCancelButton:   true,
+                confirmButtonColor: '#e74a3b',
+                cancelButtonColor:  '#858796',
+                confirmButtonText:  '<i class="fas fa-trash"></i> ' + i18n.deleteSwalConfirm,
+                cancelButtonText:   i18n.deleteSwalCancel
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+
+                $.ajax({
+                    type: 'POST',
+                    url:  '<%= baseUrl %>/api/delete_user',
+                    data: { id: userId },
+                    success: function (response) {
+                        if (response.status === 'success') {
+                            Swal.fire(i18n.successTitle, response.message, 'success');
+                            table.ajax.reload(null, false);
+                        } else {
+                            Swal.fire(i18n.errorTitle, response.message, 'warning');
+                        }
+                    },
+                    error: function () {
+                        Swal.fire(i18n.serverError, i18n.networkError, 'error');
+                    }
+                });
+            });
+        });
+
+    }); /* end document.ready */
+</script>
