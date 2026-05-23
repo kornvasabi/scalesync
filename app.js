@@ -20,6 +20,7 @@ const userController = require('./controllers/userController');
 const multer = require('multer');
 const branchController = require('./controllers/branchController'); 
 const dashboardController = require('./controllers/dashboardController');
+const materialController = require('./controllers/materialController');
 
 // 🟢 3. โยน baseUrl เข้า app.locals เพื่อให้ทุกหน้า EJS เอาไปใช้ได้
 app.locals.baseUrl = baseUrl;
@@ -180,6 +181,15 @@ appRouter.get('/api/branches', requireAuth, branchController.getBranches);
 appRouter.post('/api/branches/add', requireAuth, branchController.addBranch);
 appRouter.post('/api/branches/update/:id', requireAuth, branchController.updateBranch);
 appRouter.post('/api/branches/delete/:id', requireAuth, branchController.deleteBranch);
+
+// ระบบจัดการวัตถุดิบ
+appRouter.get('/material_list', requireAuth, loadMenus, checkPermission, materialController.showMaterialList);
+appRouter.post('/api/materials_data', requireAuth, materialController.getMaterialsData);
+appRouter.post('/api/materials/add', requireAuth, materialController.addMaterial);
+// appRouter.post('/api/materials/update/:id', requireAuth, materialController.updateMaterial);
+//appRouter.post('/api/materials/delete/:id', requireAuth, materialController.deleteMaterial);
+appRouter.post('/api/materials/purchase', requireAuth, materialController.addPurchaseLog);
+
 
 app.use('/', appRouter);               // ประตูที่ 1: สำหรับ Nginx (9090) ที่โดนตัด URL ไปแล้ว
 // 🟢 7. ผูก Router เข้ากับ baseUrl แบบไดนามิก

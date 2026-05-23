@@ -1,0 +1,464 @@
+<%# ============================================================ %>
+<%# MATERIAL LIST PAGE (ระบบจัดการวัตถุดิบ)                        %>
+<%# ============================================================ %>
+
+<style>
+    /* ── Search Box Style (สไตล์เดียวกับระบบเดิม) ────────────── */
+    .search-wrapper {
+        background: #f8f9fc;
+        border: 1px solid #e3e6f0;
+        border-radius: 0.5rem;
+        padding: 1rem 1.25rem;
+        margin-bottom: 1rem;
+    }
+    .search-wrapper .input-group .form-control {
+        border-right: 0;
+        border-radius: 0.35rem 0 0 0.35rem;
+    }
+    .search-wrapper .input-group .form-control:focus {
+        box-shadow: none;
+        border-color: #4e73df;
+    }
+    #searchBadge {
+        display: none;
+        font-size: 0.8rem;
+    }
+    #materialsTable_processing {
+        background: rgba(255,255,255,0.85);
+        border: 1px solid #e3e6f0;
+        border-radius: 0.35rem;
+        padding: 0.5rem 1rem;
+        font-weight: 600;
+        color: #4e73df;
+    }
+</style>
+
+<%- include('./layouts/header') %>
+<%- include('./layouts/sidebar') %>
+
+<div id="content-wrapper" class="d-flex flex-column">
+    <div id="content">
+
+        <%- include('./layouts/topbar') %>
+
+        <div class="my-custom-scroll">
+            <div class="container-fluid">
+
+                <h1 class="h3 mb-4 text-gray-800">จัดการวัตถุดิบ (Raw Materials)</h1>
+
+                <%# ── CARD ────────────────────────────────────── %>
+                <div class="card shadow mb-4">
+                    <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                        <h6 class="m-0 font-weight-bold text-primary">
+                            <i class="fas fa-boxes"></i> รายการวัตถุดิบทั้งหมด
+                        </h6>
+                        <button class="btn btn-sm btn-success shadow-sm" data-toggle="modal" data-target="#addMaterialModal">
+                            <i class="fas fa-plus fa-sm text-white-50"></i> เพิ่มวัตถุดิบใหม่
+                        </button>
+                    </div>
+
+                    <div class="card-body">
+
+                        <%# ── SEARCH BAR ──────────────────────── %>
+                        <div class="search-wrapper">
+                            <div class="row align-items-center">
+                                <div class="col-md-6 col-sm-12">
+                                    <label class="small font-weight-bold text-gray-600 mb-1">
+                                        <i class="fas fa-search fa-sm"></i> ค้นหาวัตถุดิบ
+                                    </label>
+                                    <div class="input-group">
+                                        <input type="text" id="searchKeywordInput" class="form-control form-control-sm" placeholder="พิมพ์ชื่อวัตถุดิบ แล้วกด Enter..." autocomplete="off">
+                                        <div class="input-group-append">
+                                            <button class="btn btn-primary btn-sm" id="btnSearch" type="button">
+                                                <i class="fas fa-search fa-sm"></i> ค้นหา
+                                            </button>
+                                            <button class="btn btn-outline-secondary btn-sm" id="btnClear" type="button" title="ล้างการค้นหา">
+                                                <i class="fas fa-times fa-sm"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 col-sm-12 mt-2 mt-md-0">
+                                    <div class="small text-muted mt-3">
+                                        <span id="searchBadge" class="badge badge-primary mr-2">
+                                            <i class="fas fa-filter fa-sm"></i> กำลังค้นหา: "<span id="searchKeywordDisplay"></span>"
+                                        </span>
+                                        <span id="totalRecord"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <%# ── DATATABLE ───────────────────────── %>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-hover" id="materialsTable" width="100%" cellspacing="0">
+                                <thead class="thead-light">
+                                    <tr>
+                                        <th width="5%" class="text-center">ID</th>
+                                        <th>ชื่อวัตถุดิบ</th>
+                                        <th class="text-center">หน่วยซื้อ (Buy)</th>
+                                        <th class="text-center">หน่วยใช้ (Use)</th>
+                                        <th class="text-center">ตัวคูณแปลงหน่วย</th>
+                                        <th class="text-center text-success">Yield (%)</th>
+                                        <th class="text-right text-danger">ต้นทุนล่าสุด/หน่วยใช้</th>
+                                        <th width="18%" class="text-center">จัดการ</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <%- include('./layouts/footer') %>
+
+    </div>
+</div>
+
+<%# ============================================================ %>
+<%# MODALS                                                       %>
+<%# ============================================================ %>
+
+<%# ── 1. MODAL: เพิ่มวัตถุดิบ ────────────────────────────────── %>
+<div class="modal fade" id="addMaterialModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <form id="formAddMaterial">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title"><i class="fas fa-plus-circle"></i> เพิ่มวัตถุดิบใหม่</h5>
+                    <button class="close text-white" type="button" data-dismiss="modal"><span>&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-12 form-group">
+                            <label>ชื่อวัตถุดิบ <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="name" placeholder="เช่น หมึกสด, น้ำตาลปี๊บ, มะนาว" required>
+                        </div>
+                    </div>
+                    <div class="row border p-3 bg-light rounded mb-3">
+                        <div class="col-md-4 form-group">
+                            <label>หน่วยที่ซื้อ (Purchase Unit) <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="purchase_unit" placeholder="เช่น กิโลกรัม, ขวด, ถุง" required>
+                        </div>
+                        <div class="col-md-4 form-group">
+                            <label>หน่วยที่ใช้ในสูตร (Usage Unit) <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="usage_unit" placeholder="เช่น กรัม, มิลลิลิตร" required>
+                        </div>
+                        <div class="col-md-4 form-group">
+                            <label>ตัวคูณ (Conversion) <span class="text-danger">*</span></label>
+                            <input type="number" step="0.0001" class="form-control" name="conversion_factor" placeholder="เช่น ซื้อ 1 kg = 1000 g ใส่ 1000" required>
+                            <small class="text-muted">1 [หน่วยซื้อ] เท่ากับกี่ [หน่วยใช้]</small>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 form-group">
+                            <label class="text-success font-weight-bold">Yield (เปอร์เซ็นต์ที่ใช้ได้จริง) %</label>
+                            <input type="number" step="0.01" class="form-control border-success" name="yield_percent" value="100" required>
+                            <small class="text-muted">เช่น หั่นทิ้ง 20% ให้กรอก 80</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" type="button" data-dismiss="modal">ยกเลิก</button>
+                    <button type="submit" class="btn btn-success">บันทึกข้อมูล</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<%# ── 2. MODAL: แก้ไขวัตถุดิบ ───────────────────────────────── %>
+<div class="modal fade" id="editMaterialModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <form id="formEditMaterial">
+                <input type="hidden" name="id" id="edit_id">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title"><i class="fas fa-edit"></i> แก้ไขวัตถุดิบ</h5>
+                    <button class="close" type="button" data-dismiss="modal"><span>&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-12 form-group">
+                            <label>ชื่อวัตถุดิบ <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="name" id="edit_name" required>
+                        </div>
+                    </div>
+                    <div class="row border p-3 bg-light rounded mb-3">
+                        <div class="col-md-4 form-group">
+                            <label>หน่วยที่ซื้อ <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="purchase_unit" id="edit_purchase_unit" required>
+                        </div>
+                        <div class="col-md-4 form-group">
+                            <label>หน่วยที่ใช้ <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="usage_unit" id="edit_usage_unit" required>
+                        </div>
+                        <div class="col-md-4 form-group">
+                            <label>ตัวคูณ <span class="text-danger">*</span></label>
+                            <input type="number" step="0.0001" class="form-control" name="conversion_factor" id="edit_conversion_factor" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 form-group">
+                            <label class="text-success font-weight-bold">Yield %</label>
+                            <input type="number" step="0.01" class="form-control border-success" name="yield_percent" id="edit_yield_percent" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" type="button" data-dismiss="modal">ยกเลิก</button>
+                    <button type="submit" class="btn btn-warning">บันทึกการแก้ไข</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<%# ── 3. MODAL: บันทึกการซื้อ (Purchase) ─────────────────────── %>
+<div class="modal fade" id="purchaseModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="formPurchase">
+                <input type="hidden" name="material_id" id="pur_material_id">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="fas fa-shopping-cart"></i> บันทึกการซื้อ (คำนวณต้นทุน)</h5>
+                    <button class="close text-white" type="button" data-dismiss="modal"><span>&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        วัตถุดิบ: <strong id="pur_material_name" class="text-lg"></strong><br>
+                        หน่วยที่ซื้อ: <strong id="pur_purchase_unit"></strong>
+                    </div>
+                    <div class="form-group">
+                        <label>วันที่ซื้อ</label>
+                        <input type="date" class="form-control" name="purchase_date" id="pur_date" required>
+                    </div>
+                    <div class="form-group">
+                        <label>ปริมาณที่ซื้อ (ตามหน่วยซื้อด้านบน) <span class="text-danger">*</span></label>
+                        <input type="number" step="0.01" class="form-control" name="qty_purchased" required>
+                    </div>
+                    <div class="form-group">
+                        <label>จำนวนเงินที่จ่ายจริง (บาท) <span class="text-danger">*</span></label>
+                        <input type="number" step="0.01" class="form-control border-danger" name="total_price" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" type="button" data-dismiss="modal">ยกเลิก</button>
+                    <button type="submit" class="btn btn-primary">บันทึกและคำนวณเข้าสต๊อก</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<%# ============================================================ %>
+<%# SCRIPTS                                                      %>
+<%# ============================================================ %>
+<script>
+$(document).ready(function () {
+
+    /* ══════════════ DataTable Setup ══════════════ */
+    const table = $('#materialsTable').DataTable({
+        processing:  true,
+        serverSide:  true,
+        searching:   true, 
+        pageLength:  50,
+        dom: '<"row"<"col-sm-12 col-md-6"i><"col-sm-12 col-md-6"p>>rt<"row"<"col-sm-12 col-md-6"i><"col-sm-12 col-md-6"p>>',
+        ajax: {
+            url:  '<%= baseUrl %>/api/materials_data',
+            type: 'POST',
+            error: function () {
+                Swal.fire('ข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
+            }
+        },
+        columns: [
+            { data: 'id', className: 'text-center' },
+            { data: 'name', className: 'font-weight-bold text-dark' },
+            { data: 'purchase_unit', className: 'text-center' },
+            { data: 'usage_unit', className: 'text-center' },
+            { data: 'conversion_factor', className: 'text-center' },
+            { 
+                data: 'yield_percent', 
+                className: 'text-center text-success font-weight-bold',
+                render: d => parseFloat(d).toFixed(2) + '%'
+            },
+            { 
+                data: 'avg_cost_per_usage_unit', 
+                className: 'text-right text-danger font-weight-bold',
+                render: (d, type, row) => `${parseFloat(d).toFixed(4)} ฿ / ${row.usage_unit}`
+            },
+            {
+                data: 'id',
+                className: 'text-center',
+                orderable: false,
+                render: function (id, type, row) {
+                    let btns = `<button class="btn btn-primary btn-sm btn-buy mb-1" data-id="${id}" data-name="${row.name}" data-unit="${row.purchase_unit}" title="บันทึกการซื้อ"><i class="fas fa-shopping-cart"></i> ซื้อ</button> `;
+                    btns += `<button class="btn btn-warning btn-sm btn-edit mb-1" data-id="${id}" title="แก้ไข"><i class="fas fa-edit"></i></button> `;
+                    btns += `<button class="btn btn-danger btn-sm btn-delete mb-1" data-id="${id}" title="ลบ"><i class="fas fa-trash"></i></button>`;
+                    return btns;
+                }
+            }
+        ],
+        drawCallback: function (settings) {
+            const api      = this.api();
+            const filtered = settings.json?.recordsFiltered ?? 0;
+            const total    = settings.json?.recordsTotal    ?? 0;
+            const keyword  = $('#searchKeywordInput').val().trim();
+
+            if (keyword) {
+                $('#searchBadge').show();
+                $('#searchKeywordDisplay').text(keyword);
+                $('#totalRecord').html(`พบ <strong>${filtered}</strong> รายการ จากทั้งหมด ${total}`);
+            } else {
+                $('#searchBadge').hide();
+                $('#totalRecord').html(`ทั้งหมด <strong>${total}</strong> รายการ`);
+            }
+        },
+        language: {
+            processing:  '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังโหลด...',
+            zeroRecords: 'ไม่พบข้อมูลวัตถุดิบที่ค้นหา',
+            emptyTable:  'ยังไม่มีข้อมูลวัตถุดิบในระบบ',
+            paginate:    { first:'«', last:'»', next:'›', previous:'‹' }
+        }
+    });
+
+    /* ══════════════ Search Bar Logic ══════════════ */
+    function doSearch() {
+        table.search($('#searchKeywordInput').val().trim()).draw();
+    }
+    $('#btnSearch').on('click', doSearch);
+    $('#searchKeywordInput').on('keypress', function (e) { if (e.which === 13) doSearch(); });
+    $('#btnClear').on('click', function () {
+        $('#searchKeywordInput').val('');
+        table.search('').draw();
+    });
+
+    /* ══════════════ Add Material ══════════════ */
+    $('#formAddMaterial').on('submit', function (e) {
+        e.preventDefault();
+        $.ajax({
+            type: 'POST',
+            url: '<%= baseUrl %>/api/materials/add',
+            data: $(this).serialize(),
+            success: function (res) {
+                if (res.status === 'success') {
+                    $('#addMaterialModal').modal('hide');
+                    $('#formAddMaterial')[0].reset();
+                    Swal.fire('สำเร็จ', res.message, 'success');
+                    table.ajax.reload(null, false);
+                } else {
+                    Swal.fire('ผิดพลาด', res.message, 'warning');
+                }
+            }
+        });
+    });
+
+    /* ══════════════ Load Data to Edit Modal ══════════════ */
+    $('#materialsTable').on('click', '.btn-edit', function () {
+        const matId = $(this).data('id');
+        $.ajax({
+            url: '<%= baseUrl %>/api/materials/get/' + matId, // *ต้องสร้าง Route/Controller รับตัวนี้ด้วย
+            type: 'GET',
+            success: function (res) {
+                if (res.status === 'success') {
+                    const m = res.data;
+                    $('#edit_id').val(m.id);
+                    $('#edit_name').val(m.name);
+                    $('#edit_purchase_unit').val(m.purchase_unit);
+                    $('#edit_usage_unit').val(m.usage_unit);
+                    $('#edit_conversion_factor').val(m.conversion_factor);
+                    $('#edit_yield_percent').val(m.yield_percent);
+                    $('#editMaterialModal').modal('show');
+                } else {
+                    Swal.fire('ผิดพลาด', res.message, 'error');
+                }
+            }
+        });
+    });
+
+    /* ══════════════ Update Material ══════════════ */
+    $('#formEditMaterial').on('submit', function (e) {
+        e.preventDefault();
+        $.ajax({
+            type: 'POST',
+            url: '<%= baseUrl %>/api/materials/update', // *ต้องสร้าง Route/Controller รับตัวนี้ด้วย
+            data: $(this).serialize(),
+            success: function (res) {
+                if (res.status === 'success') {
+                    $('#editMaterialModal').modal('hide');
+                    Swal.fire('สำเร็จ', res.message, 'success');
+                    table.ajax.reload(null, false);
+                } else {
+                    Swal.fire('ผิดพลาด', res.message, 'warning');
+                }
+            }
+        });
+    });
+
+    /* ══════════════ Delete Material ══════════════ */
+    $('#materialsTable').on('click', '.btn-delete', function () {
+        const matId = $(this).data('id');
+        Swal.fire({
+            title: 'ยืนยันการลบ?',
+            text: "หากลบแล้วจะไม่สามารถกู้คืนได้ (ระวังกระทบกับสูตรอาหารที่ใช้วัตถุดิบนี้)",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#e74a3b',
+            cancelButtonColor: '#858796',
+            confirmButtonText: 'ใช่, ลบเลย',
+            cancelButtonText: 'ยกเลิก'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    type: 'POST',
+                    url: '<%= baseUrl %>/api/materials/delete', // *ต้องสร้าง Route/Controller รับตัวนี้ด้วย
+                    data: { id: matId },
+                    success: function (res) {
+                        if (res.status === 'success') {
+                            Swal.fire('ลบสำเร็จ', res.message, 'success');
+                            table.ajax.reload(null, false);
+                        } else {
+                            Swal.fire('ผิดพลาด', res.message, 'warning');
+                        }
+                    }
+                });
+            }
+        });
+    });
+
+    /* ══════════════ Purchase Material (บันทึกการซื้อ) ══════════════ */
+    $('#materialsTable').on('click', '.btn-buy', function () {
+        $('#pur_material_id').val($(this).data('id'));
+        $('#pur_material_name').text($(this).data('name'));
+        $('#pur_purchase_unit').text($(this).data('unit'));
+        
+        $('#formPurchase')[0].reset();
+        document.getElementById('pur_date').valueAsDate = new Date(); 
+        
+        $('#purchaseModal').modal('show');
+    });
+
+    $('#formPurchase').on('submit', function (e) {
+        e.preventDefault();
+        $.ajax({
+            type: 'POST',
+            url: '<%= baseUrl %>/api/materials/purchase',
+            data: $(this).serialize(),
+            success: function (res) {
+                if (res.status === 'success') {
+                    $('#purchaseModal').modal('hide');
+                    Swal.fire('สำเร็จ', res.message, 'success');
+                    table.ajax.reload(null, false); // อัปเดตตารางเพื่อโชว์ต้นทุนใหม่ล่าสุด
+                } else {
+                    Swal.fire('ผิดพลาด', res.message, 'error');
+                }
+            }
+        });
+    });
+
+});
+</script>
