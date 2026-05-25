@@ -186,8 +186,9 @@ appRouter.post('/api/branches/delete/:id', requireAuth, branchController.deleteB
 appRouter.get('/material_list', requireAuth, loadMenus, checkPermission, materialController.showMaterialList);
 appRouter.post('/api/materials_data', requireAuth, materialController.getMaterialsData);
 appRouter.post('/api/materials/add', requireAuth, materialController.addMaterial);
-// appRouter.post('/api/materials/update/:id', requireAuth, materialController.updateMaterial);
-//appRouter.post('/api/materials/delete/:id', requireAuth, materialController.deleteMaterial);
+appRouter.get('/api/materials/get/:id', requireAuth, materialController.getMaterial);
+appRouter.post('/api/materials/update', requireAuth, materialController.updateMaterial);
+appRouter.post('/api/materials/delete', requireAuth, materialController.deleteMaterial);
 appRouter.post('/api/materials/purchase', requireAuth, materialController.addPurchaseLog);
 
 

@@ -117,4 +117,105 @@ const addPurchaseLog = async (req, res) => {
     }
 };
 
-module.exports = { showMaterialList, getMaterialsData, addMaterial, addPurchaseLog };
+// ============================================================
+// getMaterial — โหลดข้อมูลวัตถุดิบ 1 รายการขึ้นฟอร์มแก้ไข
+// URL: GET /api/materials/get/:id
+// ============================================================
+const getMaterial = async (req, res) => {
+    try {
+        const matId = req.params.id;
+
+        // ใช้ Destructuring ดึงแถวแรกออกมาเหมือนสไตล์ที่คุณคุ้นเคย
+        const [[material]] = await db.query("SELECT * FROM materials WHERE id = ?", [matId]);
+
+        if (!material) {
+            return res.json({ status: 'error', message: 'ไม่พบข้อมูลวัตถุดิบในระบบ' });
+        }
+
+        res.json({ status: 'success', data: material });
+
+    } catch (error) {
+        console.error("getMaterial Error:", error);
+        res.json({ status: 'error', message: 'เกิดข้อผิดพลาดในการดึงข้อมูล' });
+    }
+};
+
+// ============================================================
+// updateMaterial — อัปเดตข้อมูลวัตถุดิบ
+// URL: POST /api/materials/update
+// ============================================================
+const updateMaterial = async (req, res) => {
+    try {
+        const { id, name, purchase_unit, usage_unit, conversion_factor, yield_percent } = req.body;
+
+        if (!id || !name || !purchase_unit || !usage_unit || !conversion_factor) {
+            return res.json({ status: 'error', message: 'กรุณากรอกข้อมูลสำคัญให้ครบถ้วนครับ' });
+        }
+
+        const yieldVal = yield_percent || 100.00;
+
+        // อัปเดตข้อมูลพื้นฐาน (ไม่รวมต้นทุนเฉลี่ย เพราะต้นทุนจะเปลี่ยนเมื่อบันทึกการซื้อจริงเท่านั้น)
+        await db.query(
+            `UPDATE materials 
+             SET name = ?, purchase_unit = ?, usage_unit = ?, conversion_factor = ?, yield_percent = ? 
+             WHERE id = ?`,
+            [name, purchase_unit, usage_unit, conversion_factor, yieldVal, id]
+        );
+
+        res.json({ status: 'success', message: 'อัปเดตข้อมูลวัตถุดิบเรียบร้อยแล้ว!' });
+
+    } catch (error) {
+        console.error("updateMaterial Error:", error);
+        res.json({ status: 'error', message: 'เกิดข้อผิดพลาดในการอัปเดตข้อมูลวัตถุดิบ' });
+    }
+};
+
+// ============================================================
+// deleteMaterial — ลบวัตถุดิบ
+// URL: POST /api/materials/delete
+// ============================================================
+const deleteMaterial = async (req, res) => {
+    try {
+        const { id } = req.body;
+
+        if (!id) {
+            return res.json({ status: 'error', message: 'ไม่ระบุรหัสวัตถุดิบที่ต้องการลบ' });
+        }
+
+        /* 🔒 จุดตรวจสอบความปลอดภัย (Data Integrity Check):
+           ก่อนจะลบวัตถุดิบ ต้องเช็คก่อนว่าวัตถุดิบชิ้นนี้ถูกผูกอยู่กับ "สูตรอาหาร" ใดๆ ในตาราง recipe_ingredients หรือไม่
+           เพื่อป้องกันปัญหา Foreign Key Error หรือทำให้สูตรอาหารที่เคยเขียนไว้ข้อมูลพัง (กำพร้าวัตถุดิบ)
+        */
+        const [[checkUsage]] = await db.query(
+            "SELECT COUNT(*) AS count FROM recipe_ingredients WHERE material_id = ?", 
+            [id]
+        );
+
+        if (checkUsage.count > 0) {
+            return res.json({ 
+                status: 'error', 
+                message: 'ไม่สามารถลบได้ เนื่องจากวัตถุดิบนี้กำลังถูกใช้งานอยู่ในสูตรอาหาร กรุณาลบวัตถุดิบนี้ออกจากสูตรอาหารก่อนครับ' 
+            });
+        }
+
+        // หากผ่านเงื่อนไข ไม่มีสูตรไหนเรียกใช้ ก็ทำการลบได้เลย
+        await db.query("DELETE FROM materials WHERE id = ?", [id]);
+        
+        res.json({ status: 'success', message: 'ลบข้อมูลวัตถุดิบออกจากระบบเรียบร้อยแล้ว!' });
+
+    } catch (error) {
+        console.error("deleteMaterial Error:", error);
+        res.json({ status: 'error', message: 'เกิดข้อผิดพลาด ไม่สามารถลบข้อมูลวัตถุดิบได้' });
+    }
+};
+
+// อย่าลืมเอาทั้ง 3 ฟังก์ชันนี้ใส่เพิ่มเข้าไปใน module.exports ด้านล่างสุดของไฟล์ด้วยนะครับ
+module.exports = { 
+    showMaterialList, 
+    getMaterialsData, 
+    addMaterial, 
+    addPurchaseLog,
+    getMaterial,      // <-- เพิ่มตัวนี้
+    updateMaterial,   // <-- เพิ่มตัวนี้
+    deleteMaterial    // <-- เพิ่มตัวนี้
+};
