@@ -21,6 +21,7 @@ const multer = require('multer');
 const branchController = require('./controllers/branchController'); 
 const dashboardController = require('./controllers/dashboardController');
 const materialController = require('./controllers/materialController');
+const recipeController = require('./controllers/recipeController');
 
 // 🟢 3. โยน baseUrl เข้า app.locals เพื่อให้ทุกหน้า EJS เอาไปใช้ได้
 app.locals.baseUrl = baseUrl;
@@ -190,6 +191,15 @@ appRouter.get('/api/materials/get/:id', requireAuth, materialController.getMater
 appRouter.post('/api/materials/update', requireAuth, materialController.updateMaterial);
 appRouter.post('/api/materials/delete', requireAuth, materialController.deleteMaterial);
 appRouter.post('/api/materials/purchase', requireAuth, materialController.addPurchaseLog);
+
+// ==========================================
+// ระบบจัดการสูตรอาหาร (Recipe Management)
+// ==========================================
+appRouter.get('/recipe_list', requireAuth, loadMenus, checkPermission, recipeController.showRecipeList);
+appRouter.post('/api/recipes_data', requireAuth, recipeController.getRecipesData);
+appRouter.post('/api/recipes/add', requireAuth, recipeController.addRecipe);
+appRouter.get('/api/recipes/ingredients/:id', requireAuth, recipeController.getRecipeIngredients);
+appRouter.post('/api/recipes/delete', requireAuth, recipeController.deleteRecipe);
 
 
 app.use('/', appRouter);               // ประตูที่ 1: สำหรับ Nginx (9090) ที่โดนตัด URL ไปแล้ว

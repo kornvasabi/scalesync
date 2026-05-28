@@ -1,0 +1,499 @@
+<%# ============================================================ %>
+<%# RECIPE LIST PAGE (ระบบจัดการสูตรอาหาร)                       %>
+<%# ============================================================ %>
+
+<style>
+    /* ── สไตล์เดิม ── */
+    .search-wrapper { background: #f8f9fc; border: 1px solid #e3e6f0; border-radius: 0.5rem; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+    .search-wrapper .input-group .form-control { border-right: 0; border-radius: 0.35rem 0 0 0.35rem; }
+    .search-wrapper .input-group .form-control:focus { box-shadow: none; border-color: #4e73df; }
+    #searchBadge { display: none; font-size: 0.8rem; }
+    
+    /* ── ส่วนเพิ่มเฉพาะหน้า Recipe (ตกแต่งฟอร์มเพิ่มส่วนผสม) ── */
+    .ingredient-row {
+        background: #fff;
+        border: 1px dashed #d1d3e2;
+        padding: 10px;
+        border-radius: 5px;
+        margin-bottom: 10px;
+        transition: all 0.3s ease;
+    }
+    .ingredient-row:hover { border-color: #4e73df; background: #f8f9fc; }
+</style>
+
+<%- include('./layouts/header') %>
+<%- include('./layouts/sidebar') %>
+
+<div id="content-wrapper" class="d-flex flex-column">
+    <div id="content">
+
+        <%- include('./layouts/topbar') %>
+
+        <div class="my-custom-scroll">
+            <div class="container-fluid">
+
+                <h1 class="h3 mb-4 text-gray-800">จัดการสูตรอาหาร (Recipe Management)</h1>
+
+                <%# ── CARD ────────────────────────────────────── %>
+                <div class="card shadow mb-4">
+                    <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                        <h6 class="m-0 font-weight-bold text-primary">
+                            <i class="fas fa-utensils"></i> รายการสูตรอาหารและเมนู
+                        </h6>
+                        <button class="btn btn-sm btn-success shadow-sm" data-toggle="modal" data-target="#addRecipeModal">
+                            <i class="fas fa-plus fa-sm text-white-50"></i> สร้างสูตรใหม่
+                        </button>
+                    </div>
+
+                    <div class="card-body">
+
+                        <%# ── SEARCH BAR ──────────────────────── %>
+                        <div class="search-wrapper">
+                            <div class="row align-items-center">
+                                <div class="col-md-6 col-sm-12">
+                                    <label class="small font-weight-bold text-gray-600 mb-1">
+                                        <i class="fas fa-search fa-sm"></i> ค้นหาสูตรอาหาร
+                                    </label>
+                                    <div class="input-group">
+                                        <input type="text" id="searchKeywordInput" class="form-control form-control-sm" placeholder="พิมพ์ชื่อสูตรอาหาร..." autocomplete="off">
+                                        <div class="input-group-append">
+                                            <button class="btn btn-primary btn-sm" id="btnSearch" type="button"><i class="fas fa-search fa-sm"></i> ค้นหา</button>
+                                            <button class="btn btn-outline-secondary btn-sm" id="btnClear" type="button"><i class="fas fa-times fa-sm"></i></button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 col-sm-12 mt-2 mt-md-0">
+                                    <div class="small text-muted mt-3">
+                                        <span id="searchBadge" class="badge badge-primary mr-2"><i class="fas fa-filter fa-sm"></i> กำลังค้นหา: "<span id="searchKeywordDisplay"></span>"</span>
+                                        <span id="totalRecord"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <%# ── DATATABLE ───────────────────────── %>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-hover" id="recipesTable" width="100%" cellspacing="0">
+                                <thead class="thead-light">
+                                    <tr>
+                                        <th width="5%" class="text-center">ID</th>
+                                        <th>ชื่อสูตร/เมนู</th>
+                                        <th class="text-center">ปริมาณที่ได้ (Yield)</th>
+                                        <th class="text-right text-success">ราคาขายตั้งต้น (฿)</th>
+                                        <th class="text-right text-danger">ต้นทุนรวมล่าสุด (฿)</th>
+                                        <th class="text-right text-info">กำไรขั้นต้น (฿)</th>
+                                        <th width="15%" class="text-center">จัดการ</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <%- include('./layouts/footer') %>
+
+    </div>
+</div>
+
+<%# ============================================================ %>
+<%# MODAL: เพิ่มสูตรอาหาร (Dynamic Form)                          %>
+<%# ============================================================ %>
+<div class="modal fade" id="addRecipeModal" tabindex="-1" role="dialog" aria-hidden="true" data-backdrop="static">
+    <div class="modal-dialog modal-xl" role="document"> <div class="modal-content">
+            <form id="formAddRecipe">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title"><i class="fas fa-plus-circle"></i> สร้างสูตรอาหารใหม่</h5>
+                    <button class="close text-white" type="button" data-dismiss="modal"><span>&times;</span></button>
+                </div>
+                
+                <div class="modal-body bg-light">
+                    
+                    <div class="card shadow-sm mb-4">
+                        <div class="card-header bg-white font-weight-bold text-primary">1. ข้อมูลทั่วไป</div>
+                        <div class="card-body row pb-0">
+                            <div class="col-md-6 form-group">
+                                <label>ชื่อสูตร / ชื่อเมนู <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" name="name" placeholder="เช่น น้ำจิ้มซีฟู้ด สูตร 1, หมึกย่าง" required>
+                            </div>
+                            <div class="col-md-3 form-group">
+                                <label>ปริมาณที่ทำได้ (จำนวน) <span class="text-danger">*</span></label>
+                                <input type="number" step="0.01" class="form-control" name="base_yield_qty" placeholder="เช่น 1.0" required>
+                            </div>
+                            <div class="col-md-3 form-group">
+                                <label>หน่วยที่ทำได้ <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" name="base_yield_unit" placeholder="เช่น ลิตร, จาน, ไม้" required>
+                            </div>
+                            <div class="col-md-4 form-group">
+                                <label class="text-success font-weight-bold">ราคาขายปลีกตั้งต้น (บาท) <span class="text-danger">*</span></label>
+                                <input type="number" step="0.01" class="form-control border-success" name="default_selling_price" placeholder="เอาไว้คำนวณกำไร" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-white font-weight-bold text-info d-flex justify-content-between align-items-center">
+                            <span>2. กำหนดส่วนผสม (Ingredients)</span>
+                            <button type="button" class="btn btn-sm btn-primary shadow-sm" id="btnAddIngredient">
+                                <i class="fas fa-plus"></i> เพิ่มวัตถุดิบ
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="ingredient-rows-container">
+                                </div>
+                            <div id="empty-ingredient-msg" class="text-center text-muted py-3">
+                                ยังไม่มีส่วนผสม กรุณากดปุ่ม "เพิ่มวัตถุดิบ" ด้านบน
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" type="button" data-dismiss="modal">ยกเลิก</button>
+                    <button type="submit" class="btn btn-success"><i class="fas fa-save"></i> บันทึกสูตรอาหาร</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<%# ── MODAL: ดูส่วนผสมของสูตรอาหาร (View Ingredients) ── %>
+<div class="modal fade" id="viewRecipeModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-list"></i> ส่วนผสมของสูตร: <span id="viewRecipeName" class="font-weight-bold"></span></h5>
+                <button class="close text-white" type="button" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-secondary text-center mb-3">
+                    <strong>ปริมาณที่ทำได้ (Yield):</strong> <span id="viewRecipeYield" class="text-primary font-weight-bold"></span>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered table-striped text-dark">
+                        <thead class="thead-light text-center">
+                            <tr>
+                                <th>ลำดับ</th>
+                                <th>วัตถุดิบ</th>
+                                <th>ปริมาณที่ใช้</th>
+                                <th>ต้นทุน/หน่วย (฿)</th>
+                                <th>รวมต้นทุน (฿)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="viewIngredientsBody">
+                            </tbody>
+                        <tfoot class="font-weight-bold bg-light">
+                            <tr>
+                                <td colspan="4" class="text-right text-danger">ต้นทุนรวมทั้งหมด (Total Cost):</td>
+                                <td class="text-right text-danger" id="viewTotalCost">0.00</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" type="button" data-dismiss="modal">ปิดหน้าต่าง</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%# ── HTML TEMPLATE สำหรับ Dynamic Form (ซ่อนไว้ให้ JS คัดลอก) ── %>
+<template id="ingredient-row-template">
+    <div class="row ingredient-row align-items-end">
+        <div class="col-md-7 form-group mb-0">
+            <label class="small text-muted">เลือกวัตถุดิบ</label>
+            <select class="form-control mat-select" required>
+                <option value="">-- กรุณาเลือก --</option>
+                <% materials.forEach(function(m) { %>
+                    <option value="<%= m.id %>" data-unit="<%= m.usage_unit %>" data-cost="<%= m.avg_cost_per_usage_unit %>">
+                        <%= m.name %> (หน่วยใช้: <%= m.usage_unit %>)
+                    </option>
+                <% }); %>
+            </select>
+        </div>
+        <div class="col-md-4 form-group mb-0">
+            <label class="small text-muted">ปริมาณที่ใช้</label>
+            <div class="input-group">
+                <input type="number" step="0.0001" class="form-control qty-input" placeholder="0.00" required>
+                <div class="input-group-append">
+                    <span class="input-group-text unit-display">-</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-1 form-group mb-0 text-center">
+            <button type="button" class="btn btn-danger btn-remove-row" title="ลบแถวนี้">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    </div>
+</template>
+
+<%# ============================================================ %>
+<%# SCRIPTS                                                      %>
+<%# ============================================================ %>
+<script>
+$(document).ready(function () {
+
+    /* ══════════════ DataTable Setup ══════════════ */
+    const table = $('#recipesTable').DataTable({
+        processing:  true,
+        serverSide:  true,
+        searching:   true, 
+        pageLength:  50,
+        dom: '<"row"<"col-sm-12 col-md-6"i><"col-sm-12 col-md-6"p>>rt<"row"<"col-sm-12 col-md-6"i><"col-sm-12 col-md-6"p>>',
+        ajax: {
+            url:  '<%= baseUrl %>/api/recipes_data',
+            type: 'POST'
+        },
+        columns: [
+            { data: 'id', className: 'text-center' },
+            { data: 'name', className: 'font-weight-bold text-dark' },
+            { 
+                data: null, 
+                className: 'text-center',
+                render: (d, t, row) => `${row.base_yield_qty} ${row.base_yield_unit}` 
+            },
+            { 
+                data: 'default_selling_price', 
+                className: 'text-right text-success font-weight-bold',
+                render: d => Number(d).toLocaleString('en-US', {minimumFractionDigits: 2})
+            },
+            { 
+                data: 'total_cost', 
+                className: 'text-right text-danger font-weight-bold',
+                render: d => Number(d).toLocaleString('en-US', {minimumFractionDigits: 4})
+            },
+            { 
+                // คอลัมน์คำนวณกำไร (ราคาขาย - ต้นทุน) โชว์กันแบบ Real-time
+                data: null, 
+                className: 'text-right text-info font-weight-bold',
+                render: (d, t, row) => {
+                    let profit = parseFloat(row.default_selling_price) - parseFloat(row.total_cost);
+                    return Number(profit).toLocaleString('en-US', {minimumFractionDigits: 2});
+                }
+            },
+            {
+                data: 'id',
+                className: 'text-center',
+                orderable: false,
+                render: function (id) {
+                    let btns = `<button class="btn btn-info btn-sm btn-view mb-1" data-id="${id}" title="ดูส่วนผสม"><i class="fas fa-eye"></i></button> `;
+                    btns += `<button class="btn btn-danger btn-sm btn-delete mb-1" data-id="${id}" title="ลบสูตร"><i class="fas fa-trash"></i></button>`;
+                    return btns;
+                }
+            }
+        ]
+    });
+
+    /* ══════════════ Search Bar ══════════════ */
+    function doSearch() { table.search($('#searchKeywordInput').val().trim()).draw(); }
+    $('#btnSearch').on('click', doSearch);
+    $('#searchKeywordInput').on('keypress', function (e) { if (e.which === 13) doSearch(); });
+    $('#btnClear').on('click', function () { $('#searchKeywordInput').val(''); table.search('').draw(); });
+
+
+    /* ══════════════ DYNAMIC FORM LOGIC (เพิ่ม/ลบ แถววัตถุดิบ) ══════════════ */
+    
+    // ฟังก์ชันสร้างแถวใหม่
+    function addIngredientRow() {
+        // ดึง HTML จากในแท็ก <template> มาโคลน
+        const template = document.getElementById('ingredient-row-template').content.cloneNode(true);
+        $('#ingredient-rows-container').append(template);
+        $('#empty-ingredient-msg').hide(); // ซ่อนข้อความ "ยังไม่มีส่วนผสม"
+    }
+
+    // กดปุ่มเพิ่มวัตถุดิบ
+    $('#btnAddIngredient').on('click', function() {
+        addIngredientRow();
+    });
+
+    // กดปุ่มลบแถว (ต้องใช้ Event Delegation เพราะเป็น Element ที่สร้างขึ้นมาใหม่)
+    $('#ingredient-rows-container').on('click', '.btn-remove-row', function() {
+        $(this).closest('.ingredient-row').remove();
+        
+        // ถ้าลบหมดแล้ว ให้โชว์ข้อความแจ้งเตือน
+        if($('#ingredient-rows-container .ingredient-row').length === 0) {
+            $('#empty-ingredient-msg').show();
+        }
+    });
+
+    // เมื่อเลือกวัตถุดิบ ให้เปลี่ยน Label หน่วย (เช่น กรัม, ml) ตามวัตถุดิบนั้นอัตโนมัติ
+    $('#ingredient-rows-container').on('change', '.mat-select', function() {
+        const selectedOption = $(this).find('option:selected');
+        const unit = selectedOption.data('unit');
+        
+        // หา Element ช่องแสดงหน่วย ที่อยู่ในแถวเดียวกัน
+        if(unit) {
+            $(this).closest('.ingredient-row').find('.unit-display').text(unit);
+        } else {
+            $(this).closest('.ingredient-row').find('.unit-display').text('-');
+        }
+    });
+
+    /* ══════════════ SUBMIT FORM (Save Recipe & Ingredients) ══════════════ */
+    $('#formAddRecipe').on('submit', function (e) {
+        e.preventDefault();
+
+        // 1. ตรวจสอบว่าใส่ส่วนผสมหรือยัง
+        if($('#ingredient-rows-container .ingredient-row').length === 0) {
+            Swal.fire('แจ้งเตือน', 'กรุณาเพิ่มส่วนผสมอย่างน้อย 1 รายการครับ', 'warning');
+            return;
+        }
+
+        // 2. จัดเตรียม Object เพื่อแปลงเป็น JSON
+        let payload = {
+            name: $('input[name="name"]').val(),
+            base_yield_qty: $('input[name="base_yield_qty"]').val(),
+            base_yield_unit: $('input[name="base_yield_unit"]').val(),
+            default_selling_price: $('input[name="default_selling_price"]').val(),
+            ingredients: [] // Array สำหรับเก็บวัตถุดิบ
+        };
+
+        // 3. วนลูปอ่านค่าจากแถว Dynamic แต่ละแถว
+        let isValid = true;
+        $('.ingredient-row').each(function() {
+            let mat_id = $(this).find('.mat-select').val();
+            let qty = $(this).find('.qty-input').val();
+
+            if (!mat_id || !qty) {
+                isValid = false; // ถ้ามีแถวไหนกรอกไม่ครบ
+            } else {
+                payload.ingredients.push({
+                    material_id: mat_id,
+                    qty_required: qty
+                });
+            }
+        });
+
+        if(!isValid) {
+            Swal.fire('แจ้งเตือน', 'กรุณาเลือกวัตถุดิบและระบุปริมาณให้ครบทุกแถว', 'warning');
+            return;
+        }
+
+        // 4. ส่งข้อมูลด้วย AJAX (ใช้ content-type: application/json)
+        $.ajax({
+            type: 'POST',
+            url: '<%= baseUrl %>/api/recipes/add',
+            contentType: 'application/json', // ⚠️ สำคัญมาก: เพื่อให้ Node.js แปลง Array ซ้อนได้สมบูรณ์
+            data: JSON.stringify(payload),
+            success: function (res) {
+                if (res.status === 'success') {
+                    $('#addRecipeModal').modal('hide');
+                    $('#formAddRecipe')[0].reset();
+                    $('#ingredient-rows-container').empty(); // เคลียร์แถว
+                    $('#empty-ingredient-msg').show();
+                    Swal.fire('สำเร็จ', res.message, 'success');
+                    table.ajax.reload(null, false);
+                } else {
+                    Swal.fire('ผิดพลาด', res.message, 'warning');
+                }
+            },
+            error: function () {
+                Swal.fire('ผิดพลาด', 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
+            }
+        });
+    });
+
+    // รีเซ็ตฟอร์มเวลาปิด Modal
+    $('#addRecipeModal').on('hidden.bs.modal', function () {
+        $('#formAddRecipe')[0].reset();
+        $('#ingredient-rows-container').empty();
+        $('#empty-ingredient-msg').show();
+    });
+	/* ══════════════ VIEW: โหลดข้อมูลส่วนผสมขึ้น Modal ══════════════ */
+    $('#recipesTable').on('click', '.btn-view', function () {
+        const recipeId = $(this).data('id');
+        
+        $.ajax({
+            url: '<%= baseUrl %>/api/recipes/ingredients/' + recipeId,
+            type: 'GET',
+            success: function (res) {
+                if (res.status === 'success') {
+                    const r = res.data.recipe;
+                    const items = res.data.ingredients;
+
+                    // แปะชื่อสูตรและปริมาณที่ทำได้
+                    $('#viewRecipeName').text(r.name);
+                    $('#viewRecipeYield').text(`${r.base_yield_qty} ${r.base_yield_unit}`);
+
+                    // เคลียร์ตารางและวนลูปแปะส่วนผสม
+                    const tbody = $('#viewIngredientsBody');
+                    tbody.empty();
+
+                    let sumCost = 0;
+                    
+                    if(items.length > 0) {
+                        items.forEach((item, index) => {
+                            sumCost += parseFloat(item.item_cost);
+                            
+                            tbody.append(`
+                                <tr>
+                                    <td class="text-center">${index + 1}</td>
+                                    <td>${item.material_name}</td>
+                                    <td class="text-right">${item.qty_required} ${item.usage_unit}</td>
+                                    <td class="text-right text-muted">${Number(item.avg_cost_per_usage_unit).toFixed(4)}</td>
+                                    <td class="text-right">${Number(item.item_cost).toFixed(4)}</td>
+                                </tr>
+                            `);
+                        });
+                    } else {
+                        tbody.append('<tr><td colspan="5" class="text-center text-muted">ไม่พบข้อมูลส่วนผสม</td></tr>');
+                    }
+
+                    // แปะราคารวม
+                    $('#viewTotalCost').text(sumCost.toLocaleString('en-US', {minimumFractionDigits: 4}));
+                    
+                    $('#viewRecipeModal').modal('show');
+                } else {
+                    Swal.fire('ผิดพลาด', res.message, 'error');
+                }
+            },
+            error: function () {
+                Swal.fire('ผิดพลาด', 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
+            }
+        });
+    });
+
+    /* ══════════════ DELETE: ลบสูตรอาหาร ══════════════ */
+    $('#recipesTable').on('click', '.btn-delete', function () {
+        const recipeId = $(this).data('id');
+        
+        Swal.fire({
+            title: 'ยืนยันการลบสูตรอาหาร?',
+            text: "หากลบแล้ว รายการส่วนผสมของสูตรนี้จะถูกลบออกทั้งหมดและไม่สามารถกู้คืนได้!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#e74a3b',
+            cancelButtonColor: '#858796',
+            confirmButtonText: '<i class="fas fa-trash"></i> ยืนยันการลบ',
+            cancelButtonText: 'ยกเลิก'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    type: 'POST',
+                    url: '<%= baseUrl %>/api/recipes/delete',
+                    data: { id: recipeId },
+                    success: function (res) {
+                        if (res.status === 'success') {
+                            Swal.fire('ลบสำเร็จ', res.message, 'success');
+                            table.ajax.reload(null, false);
+                        } else {
+                            Swal.fire('ผิดพลาด', res.message, 'warning');
+                        }
+                    },
+                    error: function () {
+                        Swal.fire('ผิดพลาด', 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
+                    }
+                });
+            }
+        });
+    });
+});
+</script>
