@@ -13,7 +13,7 @@ const pool = mysql.createPool({
     queueLimit: 0
 });
 
-// ตดสอบการเชื่อมต่อเบื้องต้น (สไตล์ Tester)
+// ทดสอบการเชื่อมต่อเบื้องต้น (สไตล์ Tester)
 pool.getConnection()
     .then(conn => {
         console.log('✅ connect to MySQL success!');

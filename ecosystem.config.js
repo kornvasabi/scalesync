@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: "emis",
+      name: "scalesync",
       script: "./app.js",
       instances: "max",        // ใช้ทุก CPU core (หรือใส่ตัวเลขเช่น 2, 4)
       exec_mode: "cluster",    // รันแบบ cluster mode

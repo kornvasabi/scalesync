@@ -1,8 +1,8 @@
-// 1. เลื่อนไปด้านบนของ app.js แอดบรรทัดนี้เพิ่มเข้าไปร่วมกับตัวอื่นๆ
-const { connectMSSQL } = require('./config/mssqlDb');
-
 // 1. 🟢 โหลด dotenv เป็นบรรทัดแรกสุดของไฟล์เลยครับ (สำคัญมาก!)
 require('dotenv').config();
+
+// 1. เลื่อนไปด้านบนของ app.js แอดบรรทัดนี้เพิ่มเข้าไปร่วมกับตัวอื่นๆ
+const { connectMSSQL } = require('./config/mssqlDb');
 
 // 🟢 2. Base Path แหล่งเดียวจาก config/baseUrl.js (อ่าน BASE_URL จาก .env)
 const baseUrl = require('./config/baseUrl');

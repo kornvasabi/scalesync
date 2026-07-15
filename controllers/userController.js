@@ -92,53 +92,59 @@ const getUsersData = async (req, res) => {
 // addUser — เพิ่มผู้ใช้ใหม่
 // ============================================================
 const addUser = async (req, res) => {
+    const connection = await db.getConnection(); // 🔥 ใช้ connection แยก
+
     try {
+        await connection.beginTransaction(); // 🚀 เริ่ม transaction
+
         const { username, password, fullname, group_id, branch_id, dept_id, accessible_branches, expires_at } = req.body;
 
         if (!username || !password || !fullname) {
-            return res.json({ status: 'error', message: 'กรุณากรอก Username, Password และชื่อ-นามสกุลให้ครบถ้วนครับ' });
+            return res.json({ status: 'error', message: 'กรุณากรอกข้อมูลให้ครบ' });
         }
 
-        const paramExpiresAt = (expires_at && expires_at.trim() !== '') ? expires_at : null;
-        const g_id = group_id  || null;
-        const b_id = branch_id || null;
-        const d_id = dept_id   || null;
+        // ── hash password ──
+        const salt = await bcrypt.genSalt(10);
+		
+		const combined = `${password}_${username}`;
+		
+        const hashedPassword = await bcrypt.hash(combined, salt);
 
-        const salt           = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
-
-        const [result] = await db.query(
+        // ── insert users ──
+        const [result] = await connection.query(
             `INSERT INTO users (username, password, fullname, group_id, branch_id, dept_id, expires_at)
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [username, hashedPassword, fullname, g_id, b_id, d_id, paramExpiresAt]
+            [username, hashedPassword, fullname, group_id || null, branch_id || null, dept_id || null, expires_at || null]
         );
 
         const newUserId = result.insertId;
 
+        // ── insert user_branches ──
         if (accessible_branches) {
-            const branchesArray = Array.isArray(accessible_branches) ? accessible_branches : [accessible_branches];
-            await Promise.all(
-                branchesArray.map(acc_b_id =>
-                    db.query("INSERT INTO user_branches (user_id, branch_id) VALUES (?, ?)", [newUserId, acc_b_id])
-                )
-            );
+            const branchesArray = Array.isArray(accessible_branches)
+                ? accessible_branches
+                : [accessible_branches];
+
+            for (const b_id of branchesArray) {
+                await connection.query(
+                    `INSERT INTO user_branches (user_id, branch_id) VALUES (?, ?)`,
+                    [newUserId, b_id]
+                );
+            }
         }
 
-        const [[newUser]] = await db.query(
-            `SELECT u.*, g.group_name, b.branch_name, d.dept_name
-             FROM users u
-             LEFT JOIN user_groups  g ON u.group_id  = g.id
-             LEFT JOIN branches     b ON u.branch_id  = b.id
-             LEFT JOIN departments  d ON u.dept_id    = d.id
-             WHERE u.id = ?`,
-            [newUserId]
-        );
+        await connection.commit(); // ✅ สำเร็จ → commit
 
-        res.json({ status: 'success', message: 'เพิ่มผู้ใช้งานและกำหนดสิทธิ์สาขาเรียบร้อยแล้ว!', data: newUser });
+        res.json({ status: 'success', message: 'เพิ่มผู้ใช้งานสำเร็จ' });
 
     } catch (error) {
-        console.error("addUser Error:", error);
-        res.json({ status: 'error', message: 'เกิดข้อผิดพลาดในการบันทึกข้อมูลครับ' });
+        await connection.rollback(); // ❌ พัง → ย้อนทั้งหมด
+        console.error("Transaction Error:", error);
+
+        res.json({ status: 'error', message: 'เกิดข้อผิดพลาด (rollback แล้ว)' });
+
+    } finally {
+        connection.release(); // 🔥 สำคัญมาก (คืน connection)
     }
 };
 
